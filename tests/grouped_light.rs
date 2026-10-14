@@ -43,7 +43,7 @@ fn expected_grouped_light(owner: ResourceLink, on: bool, brightness: f64) -> Gro
         }),
         dimming: Some(DimmingUpdate { brightness }),
         color: Some(Stub),
-        color_temperature: Some(Stub),
+        color_temperature: None,
         color_temperature_delta: Some(Stub),
         dimming_delta: Some(Stub),
         dynamics: Some(Stub),
