@@ -297,8 +297,15 @@ impl Z2mBackend {
     }
 
     pub async fn add_switch(&mut self, apidev: &z2m::api::Device) -> ApiResult<Option<()>> {
-        let name = &apidev.friendly_name;
+        let Some(model_id) = &apidev.model_id else {
+            return Ok(None);
+        };
 
+        let Some(button_device) = Z2mButtonData::from_model_id(model_id) else {
+            return Ok(None);
+        };
+
+        let name = &apidev.friendly_name;
         let link_device = RType::Device.deterministic(&apidev.ieee_address);
 
         if let Some(old_name) = self.rmap.get(&link_device).cloned() {
@@ -323,14 +330,6 @@ impl Z2mBackend {
 
         let mut services = btreeset![link_zbc];
         let mut buttons = vec![];
-
-        let Some(model_id) = &apidev.model_id else {
-            return Ok(None);
-        };
-
-        let Some(button_device) = Z2mButtonData::from_model_id(model_id) else {
-            return Ok(None);
-        };
 
         for button in &button_device.buttons {
             let link_button = RType::Button.deterministic((&apidev.ieee_address, &button.name));

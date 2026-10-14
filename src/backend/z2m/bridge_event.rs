@@ -87,7 +87,7 @@ impl Z2mBackend {
 
         if let Some(device_topic) = msg.topic.strip_suffix("/action") {
             let Some(ref link) = self.map.get(device_topic).copied() else {
-                if !self.ignore.contains(&msg.topic) {
+                if !self.ignore.contains(&msg.topic) && !self.ignore.contains(device_topic) {
                     log::warn!(
                         "[{}] Action on unknown topic {} {}",
                         self.name,
@@ -118,6 +118,10 @@ impl Z2mBackend {
             }
             return Ok(());
         };
+
+        if val.rtype == RType::Device {
+            return Ok(());
+        }
 
         let res = self.handle_update(&val.rid, &msg.payload).await;
         if let Err(ref err) = res {
@@ -204,16 +208,17 @@ impl Z2mBackend {
                 );
                 self.add_switch_plug(dev, exp).await?;
             } else if dev.expose_action() {
-                log::info!(
-                    "[{}] Adding switch {:?}: [{}] ({})",
-                    self.name,
-                    dev.ieee_address,
-                    dev.friendly_name,
-                    dev.model_id.as_deref().unwrap_or("<unknown model>")
-                );
-                if self.add_switch(dev).await?.is_none() {
+                if let Some(()) = self.add_switch(dev).await? {
+                    log::info!(
+                        "[{}] Adding switch {:?}: [{}] ({})",
+                        self.name,
+                        dev.ieee_address,
+                        dev.friendly_name,
+                        dev.model_id.as_deref().unwrap_or("<unknown model>")
+                    );
+                } else {
                     log::debug!(
-                        "[{}] Ignoring unsupported switch device {}",
+                        "[{}] Ignoring unsupported switch/action device {}",
                         self.name,
                         dev.friendly_name
                     );
