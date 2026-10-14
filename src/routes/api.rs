@@ -1,4 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
+use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 
 use axum::Router;
 use axum::extract::{Path, State};
@@ -6,10 +8,14 @@ use axum::routing::{get, post, put};
 use bytes::Bytes;
 use chrono::Utc;
 use hue::devicedb::gradient_product_data;
+use hyper::HeaderMap;
 use log::{info, warn};
 use serde::Serialize;
 use serde_json::{Value, json};
 use tokio::sync::MutexGuard;
+
+static PAIRING_SESSIONS: LazyLock<tokio::sync::Mutex<HashMap<String, Instant>>> =
+    LazyLock::new(|| tokio::sync::Mutex::new(HashMap::new()));
 
 use bifrost_api::backend::BackendRequest;
 use hue::api::{
@@ -40,10 +46,37 @@ async fn get_api_config(State(state): State<AppState>) -> Json<impl Serialize> {
     Json(state.api_short_config().await)
 }
 
-async fn post_api(bytes: Bytes) -> ApiV1Result<Json<impl Serialize>> {
+async fn post_api(
+    headers: HeaderMap,
+    bytes: Bytes,
+) -> ApiV1Result<Json<impl Serialize>> {
     info!("post: {bytes:?}");
     let json: NewUser = serde_json::from_slice(&bytes)?;
 
+    let ip = if let Some(forwarded) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+        forwarded.split(',').next().unwrap_or("127.0.0.1").trim().to_string()
+    } else if let Some(real_ip) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
+        real_ip.trim().to_string()
+    } else {
+        "default".to_string()
+    };
+
+    let now = Instant::now();
+    let mut sessions = PAIRING_SESSIONS.lock().await;
+    sessions.retain(|_, expiry| *expiry > now);
+
+    let is_paired = match sessions.get(&ip) {
+        Some(expiry) => now < *expiry,
+        None => false,
+    };
+
+    if !is_paired {
+        sessions.insert(ip.clone(), now + Duration::from_secs(30));
+        info!("Client {ip} requested user registration. Starting 30s virtual link button window.");
+        return Err(HueApiV1Error::LinkButtonNotPressed)?;
+    }
+
+    info!("Client {ip} registered within active pairing window.");
     let res = NewUserReply {
         clientkey: if json.generateclientkey {
             Some(hex::encode_upper(STANDARD_CLIENT_KEY))
@@ -238,6 +271,10 @@ async fn get_api_user(
     state: State<AppState>,
     Path(username): Path<String>,
 ) -> ApiV1Result<Json<impl Serialize>> {
+    if username == "null" || username == "nouser" || username == "none" || username.is_empty() {
+        return Err(HueApiV1Error::UnauthorizedUser)?;
+    }
+
     let lock = state.res.lock().await;
 
     Ok(Json(ApiUserConfig {
@@ -256,6 +293,12 @@ async fn get_api_user_resource(
     State(state): State<AppState>,
     Path((username, artype)): Path<(String, ApiResourceType)>,
 ) -> ApiV1Result<Json<Value>> {
+    if (username == "null" || username == "nouser" || username == "none" || username.is_empty())
+        && !matches!(artype, ApiResourceType::Config)
+    {
+        return Err(HueApiV1Error::UnauthorizedUser)?;
+    }
+
     let lock = &state.res.lock().await;
     match artype {
         ApiResourceType::Config => Ok(Json(json!(state.api_config(username).await?))),
