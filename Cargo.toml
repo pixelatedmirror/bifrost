@@ -41,7 +41,6 @@ members = [
     "crates/z2m",
     "crates/memory2mqtt",
     "crates/zcl",
-    "crates/bifrost-frontend",
 ]
 
 [workspace.lints.rust]
