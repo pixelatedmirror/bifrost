@@ -27,10 +27,15 @@ pub struct BridgeConfig {
     pub timezone: String,
 }
 
+fn default_frontend_dir() -> Utf8PathBuf {
+    Utf8PathBuf::from("frontend")
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct BifrostConfig {
     pub state_file: Utf8PathBuf,
     pub cert_file: Utf8PathBuf,
+    #[serde(default = "default_frontend_dir")]
     pub frontend_dir: Utf8PathBuf,
 }
 
