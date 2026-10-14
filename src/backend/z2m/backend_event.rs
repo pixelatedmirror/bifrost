@@ -359,6 +359,15 @@ impl Z2mBackend {
             |group_prefix| format!("{group_prefix}{}", room_new.metadata.name),
         );
 
+        if let Some(target) = self.map.get(&group_friendly_name) {
+            if target.rtype != RType::GroupedLight {
+                log::warn!(
+                    "[{}] Cannot create Zigbee2MQTT group '{group_friendly_name}': a device with this name already exists. Zigbee2MQTT requires unique names across all devices and groups. Configure 'group_prefix' in bifrost settings (e.g. 'bifrost_') or rename the conflicting device.",
+                    self.name
+                );
+            }
+        }
+
         // Store metadata
         let mut lock = self.state.lock().await;
         let room = Room {
@@ -463,6 +472,15 @@ impl Z2mBackend {
             || zone_new.metadata.name.clone(),
             |group_prefix| format!("{group_prefix}{}", zone_new.metadata.name),
         );
+
+        if let Some(target) = self.map.get(&group_friendly_name) {
+            if target.rtype != RType::GroupedLight {
+                log::warn!(
+                    "[{}] Cannot create Zigbee2MQTT group '{group_friendly_name}': a device with this name already exists. Zigbee2MQTT requires unique names across all devices and groups. Configure 'group_prefix' in bifrost settings (e.g. 'bifrost_') or rename the conflicting device.",
+                    self.name
+                );
+            }
+        }
 
         // Store metadata
         let mut lock = self.state.lock().await;
