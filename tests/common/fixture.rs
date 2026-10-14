@@ -280,4 +280,9 @@ pub mod misc {
     pub fn dimmer_light(device_id: &FixtureDevice) -> Z2mDeviceFixture {
         Z2mDeviceFixture::new(device_id, json_file("dimmer_light.json"))
     }
+
+    #[must_use]
+    pub fn smart_plug(device_id: &FixtureDevice) -> Z2mDeviceFixture {
+        Z2mDeviceFixture::new(device_id, json_file("smart_plug.json"))
+    }
 }

@@ -1,0 +1,66 @@
+{
+    "date_code": "20210802",
+    "definition": {
+        "description": "Zigbee Smart Plug",
+        "exposes": [
+            {
+                "features": [
+                    {
+                        "access": 7,
+                        "description": "On/off state of the switch",
+                        "label": "State",
+                        "name": "state",
+                        "property": "state",
+                        "type": "binary",
+                        "value_off": "OFF",
+                        "value_on": "ON",
+                        "value_toggle": "TOGGLE"
+                    }
+                ],
+                "type": "switch"
+            }
+        ],
+        "model": "TS011F",
+        "options": [],
+        "supports_ota": false,
+        "vendor": "TuYa"
+    },
+    "endpoints": {
+        "1": {
+            "bindings": [],
+            "clusters": {
+                "input": [
+                    "genBasic",
+                    "genIdentify",
+                    "genGroups",
+                    "genScenes",
+                    "genOnOff"
+                ],
+                "output": []
+            },
+            "configured_reportings": [
+                {
+                    "attribute": "onOff",
+                    "cluster": "genOnOff",
+                    "maximum_report_interval": 65000,
+                    "minimum_report_interval": 0,
+                    "reportable_change": 1
+                }
+            ],
+            "scenes": []
+        }
+    },
+    "disabled": false,
+    "friendly_name": "",
+    "ieee_address": "",
+    "interview_completed": true,
+    "interview_state": "SUCCESSFUL",
+    "interviewing": false,
+    "manufacturer": "TuYa",
+    "model_id": "TS011F_plug",
+    "network_address": 0,
+    "power_source": "Mains (single phase)",
+    "software_build_id": "1.0.0",
+    "supported": true,
+    "type": "Router"
+}

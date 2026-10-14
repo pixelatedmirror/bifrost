@@ -912,3 +912,53 @@ async fn gradient() -> TestResult<()> {
     );
     Ok(())
 }
+
+const SMART_PLUG: FixtureDevice = FixtureDevice {
+    id: 10,
+    friendly_name: "smart_plug",
+};
+
+#[tokio::test]
+async fn smart_plug_support() -> TestResult<()> {
+    common::init();
+    let plug = fixture::misc::smart_plug(&SMART_PLUG).with_state(json!({
+        "state": "OFF"
+    }));
+
+    let fixture = Z2mFixture::new().with_device(plug);
+    let mut test = TestBridge::start(fixture.into_state()).await?;
+
+    let plug_device = test.wait_for_light(SMART_PLUG).await?;
+    let baseline = test.hue_client.get_light(&plug_device).await?;
+    let mut hue_events = test.hue_client.subscribe_events();
+    let mut z2m_requests = test.z2m.subscribe_requests();
+
+    assert_eq!(baseline.metadata.archetype, DeviceArchetype::Plug);
+    assert_eq!(baseline.dimming, None);
+    assert_eq!(baseline.color, None);
+    assert_eq!(baseline.color_temperature, None);
+    assert_eq!(baseline.on.on, false);
+
+    test.hue_client
+        .put_light(&plug_device, &json!({ "on": { "on": true } }))
+        .await?;
+
+    z2m_requests
+        .expect_set(&plug_device, json!({ "state": "ON" }))
+        .await?;
+
+    test.z2m.publish_topic(
+        SMART_PLUG.friendly_name.to_string(),
+        json!({ "state": "ON" }),
+    )?;
+
+    assert_eq!(
+        hue_events
+            .expect_update_resource(plug_device.link)
+            .await?
+            .data["on"],
+        json!({ "on": true })
+    );
+
+    Ok(())
+}

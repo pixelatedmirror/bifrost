@@ -194,6 +194,15 @@ impl Z2mBackend {
                     dev.model_id.as_deref().unwrap_or("<unknown model>")
                 );
                 self.add_light(dev, exp).await?;
+            } else if let Some(exp) = dev.expose_switch() {
+                log::info!(
+                    "[{}] Adding switch/plug {:?}: [{}] ({})",
+                    self.name,
+                    dev.ieee_address,
+                    dev.friendly_name,
+                    dev.model_id.as_deref().unwrap_or("<unknown model>")
+                );
+                self.add_switch_plug(dev, exp).await?;
             } else if dev.expose_action() {
                 log::info!(
                     "[{}] Adding switch {:?}: [{}] ({})",

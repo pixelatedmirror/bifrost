@@ -553,6 +553,7 @@ pub struct Device {
     pub description: Option<String>,
     pub date_code: Option<String>,
     pub definition: Option<DeviceDefinition>,
+    #[serde(default)]
     pub disabled: bool,
     pub endpoints: HashMap<String, DeviceEndpoint>,
     pub friendly_name: String,
@@ -619,6 +620,17 @@ impl Device {
                 base.name.as_deref() == Some("action")
             } else {
                 false
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn expose_switch(&self) -> Option<&ExposeSwitch> {
+        self.exposes().iter().find_map(|exp| {
+            if let Expose::Switch(switch) = exp {
+                Some(switch)
+            } else {
+                None
             }
         })
     }
@@ -784,6 +796,16 @@ pub struct ExposeNumeric {
 pub struct ExposeSwitch {
     #[serde(flatten)]
     pub base: ExposeBase,
+}
+
+impl ExposeSwitch {
+    #[must_use]
+    pub fn feature(&self, name: &str) -> Option<&Expose> {
+        self.base
+            .features
+            .iter()
+            .find(|exp| exp.name() == Some(name))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

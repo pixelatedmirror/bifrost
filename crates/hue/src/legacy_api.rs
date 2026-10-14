@@ -554,37 +554,32 @@ impl ApiLight {
     #[must_use]
     pub fn from_dev_and_light(uuid: &Uuid, dev: &api::Device, light: &api::Light) -> Self {
         let colormode = if light.color.is_some() {
-            LightColorMode::Xy
+            Some(LightColorMode::Xy)
+        } else if light.color_temperature.is_some() {
+            Some(LightColorMode::Ct)
         } else {
-            LightColorMode::Ct
+            None
         };
 
-        let product_data = dev.product_data.clone();
+        let has_color = light.color.is_some();
+        let has_ct = light.color_temperature.is_some();
+        let has_dimming = light.dimming.is_some();
+        let is_plug = dev.metadata.archetype == api::DeviceArchetype::Plug;
 
-        Self {
-            state: ApiLightState {
-                on: light.on.on,
-                bri: light
-                    .dimming
-                    .map(|dim| ((dim.brightness * 2.54) as u32).max(1)),
-                hue: None,
-                sat: None,
-                effect: Some("none".into()),
-                xy: light.color.clone().map(|col| col.xy.into()),
-                ct: light.color_temperature.clone().and_then(|ct| ct.mirek),
-                alert: "select".into(),
-                colormode: Some(colormode),
-                mode: "homeautomation".to_string(),
-                reachable: true,
-            },
-            swupdate: SwUpdate::default(),
-            name: light.metadata.name.clone(),
-            modelid: product_data.model_id,
-            manufacturername: product_data.manufacturer_name,
-            productname: product_data.product_name,
-            productid: product_data.hardware_platform_type,
+        let light_type = if has_color {
+            "Extended color light".to_string()
+        } else if has_ct {
+            "Color temperature light".to_string()
+        } else if has_dimming {
+            "Dimmable light".to_string()
+        } else if is_plug {
+            "On/Off plug-in unit".to_string()
+        } else {
+            "On/Off light".to_string()
+        };
 
-            capabilities: json!({
+        let capabilities = if has_color || has_ct || has_dimming {
+            json!({
                 "certified": true,
                 "control": {
                     "colorgamut": [
@@ -604,17 +599,54 @@ impl ApiLight {
                     "proxy": true,
                     "renderer": true
                 }
-            }),
+            })
+        } else {
+            json!({
+                "certified": true,
+                "control": {},
+                "streaming": {
+                    "proxy": false,
+                    "renderer": false
+                }
+            })
+        };
+
+        let product_data = dev.product_data.clone();
+
+        Self {
+            state: ApiLightState {
+                on: light.on.on,
+                bri: light
+                    .dimming
+                    .map(|dim| ((dim.brightness * 2.54) as u32).max(1)),
+                hue: None,
+                sat: None,
+                effect: Some("none".into()),
+                xy: light.color.clone().map(|col| col.xy.into()),
+                ct: light.color_temperature.clone().and_then(|ct| ct.mirek),
+                alert: "select".into(),
+                colormode,
+                mode: "homeautomation".to_string(),
+                reachable: true,
+            },
+            swupdate: SwUpdate::default(),
+            name: light.metadata.name.clone(),
+            modelid: product_data.model_id,
+            manufacturername: product_data.manufacturer_name,
+            productname: product_data.product_name,
+            productid: product_data.hardware_platform_type,
+
+            capabilities,
             config: json!({
-                "archetype": "spotbulb",
-                "function": "mixed",
+                "archetype": dev.metadata.archetype,
+                "function": if is_plug { "functional" } else { "mixed" },
                 "direction": "downwards",
                 "startup": {
                     "mode": "safety",
                     "configured": true
                 }
             }),
-            light_type: "Extended color light".to_string(),
+            light_type,
 
             /* FIXME: Should have form "00:11:22:33:44:55:66:77-0b" */
             uniqueid: uuid.as_simple().to_string(),

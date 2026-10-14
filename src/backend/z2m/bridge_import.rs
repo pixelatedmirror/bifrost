@@ -15,7 +15,7 @@ use hue::api::{
 };
 use hue::devicedb::gradient_product_data;
 use hue::scene_icons;
-use z2m::api::ExposeLight;
+use z2m::api::{ExposeLight, ExposeSwitch};
 use z2m::convert::{
     ExtractColorTemperature, ExtractDeviceProductData, ExtractDimming, ExtractLightColor,
     ExtractLightGradient,
@@ -195,6 +195,101 @@ impl Z2mBackend {
 
         res.add(&link_enttm, Resource::Entertainment(enttm))?;
         res.add(&link_taurus, Resource::Taurus(taurus))?;
+        res.add(&link_zigcon, Resource::ZigbeeConnectivity(zigcon))?;
+        drop(res);
+
+        Ok(())
+    }
+
+    pub async fn add_switch_plug(
+        &mut self,
+        apidev: &z2m::api::Device,
+        _expose: &ExposeSwitch,
+    ) -> ApiResult<()> {
+        let name = &apidev.friendly_name;
+
+        let link_device = RType::Device.deterministic(&apidev.ieee_address);
+        let link_light = RType::Light.deterministic(&apidev.ieee_address);
+        let link_zigcon = RType::ZigbeeConnectivity.deterministic(&apidev.ieee_address);
+
+        let mut product_data = DeviceProductData::guess_from_device(apidev);
+        if product_data.product_archetype == DeviceArchetype::UnknownArchetype {
+            product_data.product_archetype = DeviceArchetype::Plug;
+        }
+        if product_data.product_name == "<unknown>" {
+            if let Some(def) = &apidev.definition {
+                product_data.product_name.clone_from(&def.description);
+            } else {
+                product_data.product_name = "Smart plug".to_string();
+            }
+        }
+
+        let metadata = LightMetadata::new(product_data.product_archetype.clone(), name);
+
+        let dev = hue::api::Device {
+            product_data,
+            metadata: metadata.clone().into(),
+            services: btreeset![link_zigcon, link_light],
+            identify: Some(Stub),
+            usertest: None,
+        };
+
+        if let Some(old_name) = self.rmap.get(&link_light).cloned() {
+            if old_name != *name {
+                log::info!(
+                    "[{}] Switch/plug {:?} renamed: [{old_name}] -> [{name}]",
+                    self.name,
+                    apidev.ieee_address
+                );
+                self.map.remove(&old_name);
+            }
+        }
+
+        self.map.insert(name.clone(), link_light);
+        self.rmap.insert(link_device, name.clone());
+        self.rmap.insert(link_light, name.clone());
+
+        let mut light = Light::new(link_device, metadata);
+        light.dimming = None;
+        light.dimming_delta = None;
+        light.color = None;
+        light.color_temperature = None;
+        light.color_temperature_delta = None;
+        light.powerup = None;
+
+        let zigcon = ZigbeeConnectivity {
+            channel: None,
+            extended_pan_id: None,
+            mac_address: apidev.ieee_address.as_mac(),
+            owner: link_device,
+            status: ZigbeeConnectivityStatus::Connected,
+        };
+
+        let mut res = self.state.lock().await;
+        res.aux_set(
+            &link_light,
+            AuxData::new().with_topic(name).with_backend(&self.name),
+        );
+        if res.contains_id(&link_device.rid) {
+            let _ = res.update::<hue::api::Device>(&link_device.rid, |device| {
+                if device.metadata.name != *name {
+                    device.metadata.name.clone_from(name);
+                }
+            });
+        } else {
+            res.add(&link_device, Resource::Device(dev))?;
+        }
+
+        if res.contains_id(&link_light.rid) {
+            let _ = res.update::<Light>(&link_light.rid, |l| {
+                if l.metadata.name != *name {
+                    l.metadata.name.clone_from(name);
+                }
+            });
+        } else {
+            res.add(&link_light, Resource::Light(Box::new(light)))?;
+        }
+
         res.add(&link_zigcon, Resource::ZigbeeConnectivity(zigcon))?;
         drop(res);
 
