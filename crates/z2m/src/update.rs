@@ -182,20 +182,16 @@ impl DeviceColor {
     }
 }
 
-#[derive(Copy, Debug, Serialize, Deserialize, Clone, Default)]
-#[serde(deny_unknown_fields)]
+#[derive(Copy, Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
 pub enum PowerOnBehavior {
-    #[default]
-    Unknown,
-
-    #[serde(rename = "on")]
     On,
-
-    #[serde(rename = "off")]
     Off,
-
-    #[serde(rename = "previous")]
+    Toggle,
     Previous,
+    #[default]
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Copy, Debug, Serialize, Deserialize, Clone)]
@@ -269,4 +265,46 @@ pub enum DeviceEffect {
     None,
     #[serde(untagged)]
     Unknown(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_power_on_behavior_deserialization() {
+        assert_eq!(
+            serde_json::from_str::<PowerOnBehavior>("\"on\"").unwrap(),
+            PowerOnBehavior::On
+        );
+        assert_eq!(
+            serde_json::from_str::<PowerOnBehavior>("\"off\"").unwrap(),
+            PowerOnBehavior::Off
+        );
+        assert_eq!(
+            serde_json::from_str::<PowerOnBehavior>("\"toggle\"").unwrap(),
+            PowerOnBehavior::Toggle
+        );
+        assert_eq!(
+            serde_json::from_str::<PowerOnBehavior>("\"previous\"").unwrap(),
+            PowerOnBehavior::Previous
+        );
+        assert_eq!(
+            serde_json::from_str::<PowerOnBehavior>("\"something_unknown\"").unwrap(),
+            PowerOnBehavior::Unknown
+        );
+    }
+
+    #[test]
+    fn test_device_update_with_toggle_power_on_behavior() {
+        let json_str = r#"{
+            "brightness": 254,
+            "power_on_behavior": "toggle",
+            "state": "OFF"
+        }"#;
+        let update: DeviceUpdate = serde_json::from_str(json_str).unwrap();
+        assert_eq!(update.power_on_behavior, Some(PowerOnBehavior::Toggle));
+        assert_eq!(update.state, Some(DeviceState::Off));
+        assert_eq!(update.brightness, Some(254.0));
+    }
 }
