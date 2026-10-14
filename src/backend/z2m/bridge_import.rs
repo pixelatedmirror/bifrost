@@ -57,6 +57,17 @@ impl Z2mBackend {
             usertest: None,
         };
 
+        if let Some(old_name) = self.rmap.get(&link_light).cloned() {
+            if old_name != *name {
+                log::info!(
+                    "[{}] Light {:?} renamed: [{old_name}] -> [{name}]",
+                    self.name,
+                    apidev.ieee_address
+                );
+                self.map.remove(&old_name);
+            }
+        }
+
         self.map.insert(name.clone(), link_light);
         self.rmap.insert(link_device, name.clone());
         self.rmap.insert(link_light, name.clone());
@@ -162,8 +173,26 @@ impl Z2mBackend {
             &link_light,
             AuxData::new().with_topic(name).with_backend(&self.name),
         );
-        res.add(&link_device, Resource::Device(dev))?;
-        res.add(&link_light, Resource::Light(Box::new(light)))?;
+        if res.contains_id(&link_device.rid) {
+            let _ = res.update::<hue::api::Device>(&link_device.rid, |device| {
+                if device.metadata.name != *name {
+                    device.metadata.name.clone_from(name);
+                }
+            });
+        } else {
+            res.add(&link_device, Resource::Device(dev))?;
+        }
+
+        if res.contains_id(&link_light.rid) {
+            let _ = res.update::<Light>(&link_light.rid, |l| {
+                if l.metadata.name != *name {
+                    l.metadata.name.clone_from(name);
+                }
+            });
+        } else {
+            res.add(&link_light, Resource::Light(Box::new(light)))?;
+        }
+
         res.add(&link_enttm, Resource::Entertainment(enttm))?;
         res.add(&link_taurus, Resource::Taurus(taurus))?;
         res.add(&link_zigcon, Resource::ZigbeeConnectivity(zigcon))?;
@@ -176,6 +205,17 @@ impl Z2mBackend {
         let name = &apidev.friendly_name;
 
         let link_device = RType::Device.deterministic(&apidev.ieee_address);
+
+        if let Some(old_name) = self.rmap.get(&link_device).cloned() {
+            if old_name != *name {
+                log::info!(
+                    "[{}] Switch {:?} renamed: [{old_name}] -> [{name}]",
+                    self.name,
+                    apidev.ieee_address
+                );
+                self.map.remove(&old_name);
+            }
+        }
 
         self.map.insert(name.to_owned(), link_device);
         self.rmap.insert(link_device, name.to_owned());
@@ -232,7 +272,15 @@ impl Z2mBackend {
             aux_data = aux_data.with_model_id(model_id);
         }
         res.aux_set(&link_device, aux_data);
-        res.add(&link_device, Resource::Device(dev))?;
+        if res.contains_id(&link_device.rid) {
+            let _ = res.update::<hue::api::Device>(&link_device.rid, |device| {
+                if device.metadata.name != *name {
+                    device.metadata.name.clone_from(name);
+                }
+            });
+        } else {
+            res.add(&link_device, Resource::Device(dev))?;
+        }
         for (link_button, button) in buttons {
             res.add(&link_button, Resource::Button(button))?;
         }
@@ -381,6 +429,17 @@ impl Z2mBackend {
             }
         }
 
+        if let Some(old_topic) = self.rmap.get(&link_glight).cloned() {
+            if old_topic != topic {
+                log::info!(
+                    "[{}] Group {:?} renamed: [{old_topic}] -> [{topic}]",
+                    self.name,
+                    grp.id
+                );
+                self.map.remove(&old_topic);
+            }
+        }
+
         self.map.insert(topic.clone(), link_glight);
         self.rmap.insert(link_glight, topic.clone());
         self.rmap.insert(owner_link, topic.clone());
@@ -397,13 +456,16 @@ impl Z2mBackend {
             RType::Room => {
                 let room = Room {
                     children,
-                    metadata,
+                    metadata: metadata.clone(),
                     services: btreeset![link_glight],
                 };
                 if res.get::<Room>(&owner_link).is_ok() {
                     res.update::<Room>(&owner_link.rid, |r| {
                         r.services = room.services;
                         r.children = room.children;
+                        if r.metadata.name != metadata.name {
+                            r.metadata.name.clone_from(&metadata.name);
+                        }
                     })?;
                 } else {
                     res.add(&owner_link, Resource::Room(room))?;
@@ -412,13 +474,16 @@ impl Z2mBackend {
             RType::Zone => {
                 let zone = Zone {
                     children,
-                    metadata,
+                    metadata: metadata.clone(),
                     services: btreeset![link_glight],
                 };
                 if res.get::<Zone>(&owner_link).is_ok() {
                     res.update::<Zone>(&owner_link.rid, |z| {
                         z.services = zone.services;
                         z.children = zone.children;
+                        if z.metadata.name != metadata.name {
+                            z.metadata.name.clone_from(&metadata.name);
+                        }
                     })?;
                 } else {
                     res.add(&owner_link, Resource::Zone(zone))?;

@@ -215,6 +215,10 @@ impl Resources {
             .collect()
     }
 
+    pub fn contains_id(&self, id: &Uuid) -> bool {
+        self.state.res.contains_key(id)
+    }
+
     pub fn add(&mut self, link: &ResourceLink, obj: Resource) -> ApiResult<()> {
         assert!(
             link.rtype == obj.rtype(),

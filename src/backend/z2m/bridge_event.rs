@@ -397,7 +397,15 @@ impl Z2mBackend {
                 };
                 self.bridge_group_remove(remove).await?;
             }
-            Message::BridgeResponseGroupRename(obj) => {}
+            Message::BridgeResponseGroupRename(obj) => {
+                let Response::Ok { data, .. } = obj else {
+                    return Ok(());
+                };
+                if let Some(link) = self.map.remove(&data.from) {
+                    self.map.insert(data.to.clone(), link);
+                    self.rmap.insert(link, data.to.clone());
+                }
+            }
             Message::BridgeResponseGroupOptions(obj) => {}
 
             Message::BridgeDevices(obj) => {
