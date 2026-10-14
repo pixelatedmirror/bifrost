@@ -408,14 +408,20 @@ impl Z2mBackend {
             }
             Message::BridgeResponseGroupRemove(obj) => {
                 let Response::Ok { data: remove, .. } = obj else {
-                    log::warn!("[{}] Error reported from z2m on group remove: {obj:?}", self.name);
+                    log::warn!(
+                        "[{}] Error reported from z2m on group remove: {obj:?}",
+                        self.name
+                    );
                     return Ok(());
                 };
                 self.bridge_group_remove(remove).await?;
             }
             Message::BridgeResponseGroupRename(obj) => {
                 let Response::Ok { data, .. } = obj else {
-                    log::warn!("[{}] Error reported from z2m on group rename: {obj:?}", self.name);
+                    log::warn!(
+                        "[{}] Error reported from z2m on group rename: {obj:?}",
+                        self.name
+                    );
                     return Ok(());
                 };
                 if let Some(link) = self.map.remove(&data.from) {
@@ -425,7 +431,10 @@ impl Z2mBackend {
             }
             Message::BridgeResponseGroupOptions(obj) => {
                 if let Response::Error { error, .. } = obj {
-                    log::warn!("[{}] Error reported from z2m on group options: {error}", self.name);
+                    log::warn!(
+                        "[{}] Error reported from z2m on group options: {error}",
+                        self.name
+                    );
                 }
             }
 
