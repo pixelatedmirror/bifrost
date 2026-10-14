@@ -1,4 +1,5 @@
 [application]
+asset_dir = "assets"
 
 [web.app]
 
@@ -11,7 +12,7 @@ base_path = "frontend"
 [web.resource]
 
 # Additional CSS style files
-style = []
+style = ["assets/tailwind.css", "assets/theme-dark-dracula.css"]
 
 # Additional JavaScript files
 script = []

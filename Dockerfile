@@ -22,6 +22,8 @@ cargo build --locked --release
 cp target/release/bifrost /bifrost
 (cd crates/bifrost-frontend && dx bundle --platform web --release)
 cp -r target/dx/frontend/release/web/public /frontend
+mkdir -p /frontend/assets
+cp -r crates/bifrost-frontend/assets/* /frontend/assets/
 EOF
 
 
