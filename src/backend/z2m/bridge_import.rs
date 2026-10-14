@@ -10,7 +10,7 @@ use hue::api::{
     DeviceProductData, Entertainment, EntertainmentSegment, EntertainmentSegments, GroupArchetype,
     GroupMetadata, GroupedLight, Light, LightEffects, LightEffectsV2, LightMetadata,
     LightTimedEffect, LightTimedEffects, Metadata, OrderType, OrientationType, RType, Resource,
-    ResourceLink, Room, Scene, SceneActive, SceneMetadata, SceneRecall, SceneStatus, Stub, Taurus,
+    ResourceLink, Room, Scene, SceneActive, SceneMetadata, ScenePalette, SceneRecall, SceneStatus, Stub, Taurus,
     ZigbeeConnectivity, ZigbeeConnectivityStatus, Zone,
 };
 use hue::devicedb::gradient_product_data;
@@ -349,12 +349,7 @@ impl Z2mBackend {
                     image: guess_scene_icon(&scn.name),
                     name: scn.name.clone(),
                 },
-                palette: json!({
-                    "color": [],
-                    "dimming": [],
-                    "color_temperature": [],
-                    "effects": [],
-                }),
+                palette: Some(ScenePalette::default()),
                 speed: 0.5,
                 recall: SceneRecall {
                     action: None,

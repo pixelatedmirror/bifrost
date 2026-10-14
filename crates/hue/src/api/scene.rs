@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{
-    ColorTemperatureUpdate, ColorUpdate, DimmingUpdate, LightGradientUpdate, On, ResourceLink,
+    ColorTemperatureUpdate, ColorUpdate, DimmingUpdate, LightEffect, LightGradientUpdate, On,
+    ResourceLink,
 };
 use crate::date_format;
 
@@ -36,6 +37,53 @@ pub enum SceneStatusEnum {
     DynamicPalette,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct PaletteColorTemperature {
+    pub mirek: u16,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct PaletteEffect {
+    pub effect: LightEffect,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScenePaletteColor {
+    pub color: ColorUpdate,
+    pub dimming: DimmingUpdate,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScenePaletteColorTemperature {
+    pub color_temperature: PaletteColorTemperature,
+    pub dimming: DimmingUpdate,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct ScenePalette {
+    pub color: Vec<ScenePaletteColor>,
+    pub color_temperature: Vec<ScenePaletteColorTemperature>,
+    pub dimming: Vec<DimmingUpdate>,
+    #[serde(default)]
+    pub effects: Vec<PaletteEffect>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effects_v2: Option<Vec<PaletteEffect>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct ScenePaletteUpdate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<Vec<ScenePaletteColor>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_temperature: Option<Vec<ScenePaletteColorTemperature>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dimming: Option<Vec<DimmingUpdate>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effects: Option<Vec<PaletteEffect>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effects_v2: Option<Vec<PaletteEffect>>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Scene {
     pub actions: Vec<SceneActionElement>,
@@ -43,23 +91,8 @@ pub struct Scene {
     pub auto_dynamic: bool,
     pub group: ResourceLink,
     pub metadata: SceneMetadata,
-    /* palette: { */
-    /*     color: [], */
-    /*     color_temperature: [ */
-    /*         { */
-    /*             color_temperature: { */
-    /*                 mirek: u32 */
-    /*             }, */
-    /*             dimming: { */
-    /*                 brightness: f64, */
-    /*             } */
-    /*         } */
-    /*     ], */
-    /*     dimming: [], */
-    /*     effects: [] */
-    /* }, */
-    #[serde(default, skip_serializing_if = "Value::is_null")]
-    pub palette: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub palette: Option<ScenePalette>,
     #[serde(default)]
     pub speed: f64,
     pub status: Option<SceneStatus>,
@@ -116,7 +149,7 @@ pub struct SceneUpdate {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<SceneMetadataUpdate>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub palette: Option<Value>,
+    pub palette: Option<ScenePaletteUpdate>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub speed: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -151,6 +184,28 @@ impl SceneUpdate {
     }
 }
 
+impl AddAssign<&ScenePaletteUpdate> for ScenePalette {
+    fn add_assign(&mut self, rhs: &ScenePaletteUpdate) {
+        if let Some(color) = &rhs.color {
+            self.color.clone_from(color);
+        }
+        if let Some(color_temperature) = &rhs.color_temperature {
+            self.color_temperature.clone_from(color_temperature);
+        }
+        if let Some(dimming) = &rhs.dimming {
+            self.dimming.clone_from(dimming);
+        }
+        if let Some(effects) = &rhs.effects {
+            self.effects.clone_from(effects);
+        }
+        if let Some(effects_v2) = &rhs.effects_v2 {
+            if let Some(fx) = &mut self.effects_v2 {
+                fx.clone_from(effects_v2);
+            }
+        }
+    }
+}
+
 impl AddAssign<&SceneUpdate> for Scene {
     fn add_assign(&mut self, upd: &SceneUpdate) {
         if let Some(actions) = &upd.actions {
@@ -160,7 +215,9 @@ impl AddAssign<&SceneUpdate> for Scene {
             self.metadata += md;
         }
         if let Some(palette) = &upd.palette {
-            self.palette.clone_from(palette);
+            if let Some(pal) = &mut self.palette {
+                *pal += palette;
+            }
         }
         if let Some(speed) = upd.speed {
             self.speed = speed;
@@ -174,7 +231,7 @@ impl AddAssign<&SceneUpdate> for Scene {
 impl AddAssign<&SceneMetadataUpdate> for SceneMetadata {
     fn add_assign(&mut self, upd: &SceneMetadataUpdate) {
         if let Some(appdata) = &upd.appdata {
-            self.appdata = Some(appdata.clone());
+            self.appdata = Some(appdata.to_string());
         }
         if let Some(image) = &upd.image {
             self.image = Some(*image);

@@ -44,6 +44,10 @@ impl Client {
         self.request(scope, Method::GET, None::<()>).await
     }
 
+    pub async fn delete<T: DeserializeOwned>(&self, scope: &str) -> BifrostResult<T> {
+        self.request(scope, Method::DELETE, None::<()>).await
+    }
+
     pub async fn post<I: Serialize, O: DeserializeOwned>(
         &self,
         scope: &str,

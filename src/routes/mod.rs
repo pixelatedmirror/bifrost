@@ -1,6 +1,7 @@
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
+use axum::routing::get;
 use hue::error::{HueApiV1Error, HueError};
 use hue::legacy_api::ApiResourceType;
 use hyper::StatusCode;
@@ -18,6 +19,7 @@ pub mod bifrost;
 pub mod clip;
 pub mod eventstream;
 pub mod extractor;
+pub mod frontend;
 pub mod licenses;
 pub mod updater;
 pub mod upnp;
@@ -161,7 +163,10 @@ impl IntoResponse for ApiError {
 }
 
 pub fn router(appstate: AppState) -> Router<()> {
+    let frontend_router = frontend::router(&appstate.config());
+
     Router::new()
+        .route("/", get(|| async { Redirect::temporary("/frontend") }))
         .nest("/api", api::router())
         .nest("/auth", auth::router())
         .nest("/updater", updater::router())
@@ -170,6 +175,7 @@ pub fn router(appstate: AppState) -> Router<()> {
         .nest("/clip/v2/resource", clip::router())
         .nest("/eventstream", eventstream::router())
         .nest("/bifrost", bifrost::router())
+        .nest("/frontend", frontend_router)
         .with_state(appstate)
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
 }

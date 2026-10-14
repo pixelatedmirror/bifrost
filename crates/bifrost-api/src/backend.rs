@@ -70,6 +70,10 @@ pub enum BackendRequest {
 }
 
 impl Client {
+    pub async fn delete_backend(&self, name: &str) -> BifrostResult<()> {
+        self.delete(&format!("backend/z2m/{name}")).await
+    }
+
     pub async fn post_backend(&self, name: &str, backend: Z2mServer) -> BifrostResult<()> {
         self.post(&format!("backend/z2m/{name}"), backend).await
     }

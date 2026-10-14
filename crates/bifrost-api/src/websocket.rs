@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::backend::BackendRequest;
 use crate::config::AppConfig;
+use crate::logging::LogRecord;
 use crate::service::Service;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -11,4 +12,5 @@ pub enum Update {
     HueEvent(EventBlock),
     BackendRequest(Box<BackendRequest>),
     ServiceUpdate(Service),
+    LogEvent(LogRecord),
 }

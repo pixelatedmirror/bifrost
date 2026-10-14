@@ -31,6 +31,7 @@ pub struct BridgeConfig {
 pub struct BifrostConfig {
     pub state_file: Utf8PathBuf,
     pub cert_file: Utf8PathBuf,
+    pub frontend_dir: Utf8PathBuf,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -129,5 +130,9 @@ impl Z2mServer {
 impl Client {
     pub async fn config(&self) -> BifrostResult<AppConfig> {
         self.get("config").await
+    }
+
+    pub async fn put_config(&self, config: AppConfig) -> BifrostResult<()> {
+        self.put("config", config).await
     }
 }

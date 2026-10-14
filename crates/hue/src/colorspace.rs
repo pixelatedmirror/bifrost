@@ -123,9 +123,16 @@ impl ColorSpace {
 
     #[allow(non_snake_case)]
     #[must_use]
-    pub fn xyy_to_rgb(&self, x: f64, y: f64, Y: f64) -> [f64; 3] {
+    pub fn xyy_to_xyz(&self, x: f64, y: f64, Y: f64) -> [f64; 3] {
         let z = 1.0 - x - y;
-        self.xyz_to_rgb((Y / y) * x, Y, (Y / y) * z)
+        [(Y / y) * x, Y, (Y / y) * z]
+    }
+
+    #[allow(non_snake_case)]
+    #[must_use]
+    pub fn xyy_to_rgb(&self, x: f64, y: f64, Y: f64) -> [f64; 3] {
+        let [cx, cy, cz] = self.xyy_to_xyz(x, y, Y);
+        self.xyz_to_rgb(cx, cy, cz)
     }
 
     #[must_use]
@@ -133,16 +140,19 @@ impl ColorSpace {
         self.xyz.mult([r, g, b].map(|q| self.gamma.inverse(q)))
     }
 
-    #[allow(clippy::many_single_char_names)]
     #[must_use]
-    pub fn rgb_to_xyy(&self, r: f64, g: f64, b: f64) -> [f64; 3] {
-        let [cx, cy, cz] = self.rgb_to_xyz(r, g, b);
-
+    pub fn xyz_to_xyy(&self, cx: f64, cy: f64, cz: f64) -> [f64; 3] {
         let x = cx / (cx + cy + cz);
         let y = cy / (cx + cy + cz);
         let brightness = cy;
 
         [x, y, brightness]
+    }
+
+    #[must_use]
+    pub fn rgb_to_xyy(&self, r: f64, g: f64, b: f64) -> [f64; 3] {
+        let [cx, cy, cz] = self.rgb_to_xyz(r, g, b);
+        self.xyz_to_xyy(cx, cy, cz)
     }
 
     #[allow(clippy::many_single_char_names)]
