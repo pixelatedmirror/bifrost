@@ -46,15 +46,17 @@ async fn get_api_config(State(state): State<AppState>) -> Json<impl Serialize> {
     Json(state.api_short_config().await)
 }
 
-async fn post_api(
-    headers: HeaderMap,
-    bytes: Bytes,
-) -> ApiV1Result<Json<impl Serialize>> {
+async fn post_api(headers: HeaderMap, bytes: Bytes) -> ApiV1Result<Json<impl Serialize>> {
     info!("post: {bytes:?}");
     let json: NewUser = serde_json::from_slice(&bytes)?;
 
     let ip = if let Some(forwarded) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
-        forwarded.split(',').next().unwrap_or("127.0.0.1").trim().to_string()
+        forwarded
+            .split(',')
+            .next()
+            .unwrap_or("127.0.0.1")
+            .trim()
+            .to_string()
     } else if let Some(real_ip) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
         real_ip.trim().to_string()
     } else {

@@ -10,8 +10,8 @@ use hue::api::{
     DeviceProductData, Entertainment, EntertainmentSegment, EntertainmentSegments, GroupArchetype,
     GroupMetadata, GroupedLight, Light, LightEffects, LightEffectsV2, LightMetadata,
     LightTimedEffect, LightTimedEffects, Metadata, OrderType, OrientationType, RType, Resource,
-    ResourceLink, Room, Scene, SceneActive, SceneMetadata, ScenePalette, SceneRecall, SceneStatus, Stub, Taurus,
-    ZigbeeConnectivity, ZigbeeConnectivityStatus, Zone,
+    ResourceLink, Room, Scene, SceneActive, SceneMetadata, ScenePalette, SceneRecall, SceneStatus,
+    Stub, Taurus, ZigbeeConnectivity, ZigbeeConnectivityStatus, Zone,
 };
 use hue::devicedb::gradient_product_data;
 use hue::scene_icons;
