@@ -1,6 +1,6 @@
 # Building Stage
 ARG RUST_VERSION=1.95
-FROM rust:${RUST_VERSION}-slim-bookworm AS build
+FROM rust:${RUST_VERSION}-slim-trixie AS build
 WORKDIR /app
 COPY LICENSE LICENSE
 
@@ -20,13 +20,13 @@ RUN --mount=type=bind,source=doc,target=doc \
 set -e
 cargo build --locked --release
 cp target/release/bifrost /bifrost
-(cd crates/bifrost-frontend && dx bundle --platform web)
+(cd crates/bifrost-frontend && dx bundle --platform web --release)
 cp -r target/dx/frontend/release/web/public /frontend
 EOF
 
 
 # Final Stage
-FROM debian:bookworm-slim AS final
+FROM debian:trixie-slim AS final
 
 COPY --from=build /bifrost /app/bifrost
 COPY --from=build /frontend /app/frontend
