@@ -1,7 +1,6 @@
 use hue::api::{
     ColorTemperature, DimmingUpdate, Group, GroupArchetype, GroupMetadata, GroupedLight,
-    LightAlert, LightSignal, LightSignaling, MirekSchema, On, RType, Resource, Room, RoomNew,
-    Stub,
+    LightAlert, LightSignal, LightSignaling, MirekSchema, On, RType, Resource, Room, RoomNew, Stub,
 };
 #[cfg(test)]
 use pretty_assertions::assert_eq;

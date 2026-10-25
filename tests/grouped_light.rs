@@ -254,7 +254,10 @@ async fn change_brightness() -> TestResult<()> {
         )
         .await?;
     z2m_requests
-        .expect_set(&grouped_light, json!({"brightness": 63.5, "transition": 0.4}))
+        .expect_set(
+            &grouped_light,
+            json!({"brightness": 63.5, "transition": 0.4}),
+        )
         .await?;
 
     hue_events.expect_quiet().await?;

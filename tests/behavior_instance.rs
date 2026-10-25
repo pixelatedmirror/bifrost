@@ -132,9 +132,13 @@ async fn expect_grouped_fade(
     brightness: f64,
     duration: Duration,
 ) -> TestResult<()> {
-    z2m.expect_set(group, json!({"state": "ON", "brightness": 2.54, "transition": 0.4}))
+    z2m.expect_set(
+        group,
+        json!({"state": "ON", "brightness": 2.54, "transition": 0.4}),
+    )
+    .await?;
+    z2m.expect_set(group, json!({"color_temp": 447, "transition": 0.4}))
         .await?;
-    z2m.expect_set(group, json!({"color_temp": 447, "transition": 0.4})).await?;
     z2m.expect_set(
         group,
         json!({

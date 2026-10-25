@@ -128,7 +128,10 @@ impl<'de> Deserialize<'de> for Stub {
             where
                 M: serde::de::MapAccess<'de>,
             {
-                while let Some((_, _)) = map.next_entry::<serde::de::IgnoredAny, serde::de::IgnoredAny>()? {}
+                while let Some((_, _)) =
+                    map.next_entry::<serde::de::IgnoredAny, serde::de::IgnoredAny>()?
+                {
+                }
                 Ok(Stub)
             }
         }

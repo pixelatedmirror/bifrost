@@ -256,10 +256,7 @@ impl From<&GroupedLightUpdate> for DeviceUpdate {
             .as_ref()
             .and_then(|d| d.duration.map(|duration| f64::from(duration) / 1000.0))
             .or_else(|| {
-                if upd.dimming.is_some()
-                    || upd.color_temperature.is_some()
-                    || upd.color.is_some()
-                {
+                if upd.dimming.is_some() || upd.color_temperature.is_some() || upd.color.is_some() {
                     Some(0.4)
                 } else {
                     None
