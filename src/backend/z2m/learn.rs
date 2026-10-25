@@ -135,6 +135,8 @@ impl SceneLearn {
                     on: Some(light.on),
                     gradient,
                     effects: json!({}),
+                    effects_v2: json!({}),
+                    dynamics: json!({}),
                 },
             );
 

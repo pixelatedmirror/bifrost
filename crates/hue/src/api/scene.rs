@@ -39,9 +39,11 @@ pub enum SceneStatusEnum {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct PaletteColorTemperature {
-    pub mirek: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mirek: Option<u16>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct PaletteEffect {
     pub effect: LightEffect,
@@ -49,25 +51,32 @@ pub struct PaletteEffect {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ScenePaletteColor {
-    pub color: ColorUpdate,
-    pub dimming: DimmingUpdate,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<ColorUpdate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dimming: Option<DimmingUpdate>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ScenePaletteColorTemperature {
-    pub color_temperature: PaletteColorTemperature,
-    pub dimming: DimmingUpdate,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_temperature: Option<PaletteColorTemperature>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dimming: Option<DimmingUpdate>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ScenePalette {
+    #[serde(default, alias = "colors")]
     pub color: Vec<ScenePaletteColor>,
+    #[serde(default)]
     pub color_temperature: Vec<ScenePaletteColorTemperature>,
+    #[serde(default)]
     pub dimming: Vec<DimmingUpdate>,
     #[serde(default)]
-    pub effects: Vec<PaletteEffect>,
+    pub effects: Vec<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effects_v2: Option<Vec<PaletteEffect>>,
+    pub effects_v2: Option<Vec<Value>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -79,13 +88,14 @@ pub struct ScenePaletteUpdate {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dimming: Option<Vec<DimmingUpdate>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub effects: Option<Vec<PaletteEffect>>,
+    pub effects: Option<Vec<Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub effects_v2: Option<Vec<PaletteEffect>>,
+    pub effects_v2: Option<Vec<Value>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Scene {
+    #[serde(default)]
     pub actions: Vec<SceneActionElement>,
     #[serde(default)]
     pub auto_dynamic: bool,
@@ -95,6 +105,7 @@ pub struct Scene {
     pub palette: Option<ScenePalette>,
     #[serde(default)]
     pub speed: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<SceneStatus>,
     #[serde(default)]
     pub recall: SceneRecall,
@@ -114,6 +125,10 @@ pub struct SceneAction {
     pub gradient: Option<LightGradientUpdate>,
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub effects: Value,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub effects_v2: Value,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub dynamics: Value,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -199,9 +214,7 @@ impl AddAssign<&ScenePaletteUpdate> for ScenePalette {
             self.effects.clone_from(effects);
         }
         if let Some(effects_v2) = &rhs.effects_v2 {
-            if let Some(fx) = &mut self.effects_v2 {
-                fx.clone_from(effects_v2);
-            }
+            self.effects_v2 = Some(effects_v2.clone());
         }
     }
 }
@@ -217,6 +230,10 @@ impl AddAssign<&SceneUpdate> for Scene {
         if let Some(palette) = &upd.palette {
             if let Some(pal) = &mut self.palette {
                 *pal += palette;
+            } else {
+                let mut pal = ScenePalette::default();
+                pal += palette;
+                self.palette = Some(pal);
             }
         }
         if let Some(speed) = upd.speed {
@@ -272,4 +289,100 @@ pub struct SceneRecall {
     pub duration: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dimming: Option<DimmingUpdate>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_deserialize_hue_app_scene_with_effects_v2() {
+        let payload = json!({
+            "actions": [
+                {
+                    "action": {
+                        "color": {
+                            "xy": {
+                                "x": 0.6048986724785972,
+                                "y": 0.33962998539643
+                            }
+                        },
+                        "dimming": {
+                            "brightness": 28.244504766949152
+                        },
+                        "on": {
+                            "on": true
+                        }
+                    },
+                    "target": {
+                        "rid": "e9910a37-9f76-547f-b923-6e272b701834",
+                        "rtype": "light"
+                    }
+                }
+            ],
+            "group": {
+                "rid": "fb94f598-51b5-5d4f-b8e8-5cd7822ded5d",
+                "rtype": "zone"
+            },
+            "metadata": {
+                "image": {
+                    "rid": "a93d1cb8-3ed3-444f-b727-e23936ab9e9d",
+                    "rtype": "public_image"
+                },
+                "name": "Trick or treat"
+            },
+            "palette": {
+                "color": [
+                    {
+                        "color": {
+                            "xy": {
+                                "x": 0.1543920758280876,
+                                "y": 0.07251010879761448
+                            }
+                        },
+                        "dimming": {
+                            "brightness": 55.00000000000001
+                        }
+                    }
+                ],
+                "color_temperature": [
+                    {
+                        "color_temperature": {
+                            "mirek": 434
+                        },
+                        "dimming": {
+                            "brightness": 55.00000000000001
+                        }
+                    }
+                ],
+                "dimming": [],
+                "effects_v2": [
+                    {
+                        "action": {
+                            "effect": "cosmos",
+                            "parameters": {
+                                "color": {
+                                    "xy": {
+                                        "x": 0.25667436173377867,
+                                        "y": 0.09771288539493972
+                                    }
+                                },
+                                "speed": 0.5476190476190477
+                            }
+                        }
+                    }
+                ]
+            },
+            "speed": 0.7301587301587301
+        });
+
+        let scene: Scene = serde_json::from_value(payload).expect("Failed to deserialize scene");
+        assert_eq!(scene.metadata.name, "Trick or treat");
+        assert_eq!(scene.actions.len(), 1);
+        let palette = scene.palette.expect("Expected palette");
+        assert_eq!(palette.color.len(), 1);
+        assert_eq!(palette.color_temperature.len(), 1);
+        assert!(palette.effects_v2.is_some());
+    }
 }
