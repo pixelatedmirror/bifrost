@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{
-    ColorTemperatureUpdate, ColorUpdate, DimmingDeltaUpdate, DimmingUpdate, LightAlert,
-    LightSignal, LightSignaling, On, ResourceLink, Stub,
+    ColorTemperature, ColorTemperatureUpdate, ColorUpdate, DimmingDeltaUpdate, DimmingUpdate,
+    LightAlert, LightSignal, LightSignaling, MirekSchema, On, ResourceLink, Stub,
 };
 use crate::legacy_api::ApiLightStateUpdate;
 use crate::xy::XY;
@@ -19,7 +19,7 @@ pub struct GroupedLight {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<Stub>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub color_temperature: Option<Stub>,
+    pub color_temperature: Option<ColorTemperature>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color_temperature_delta: Option<Stub>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -42,7 +42,11 @@ impl GroupedLight {
             }),
             dimming: Some(DimmingUpdate { brightness: 0.0 }),
             color: Some(Stub),
-            color_temperature: Some(Stub),
+            color_temperature: Some(ColorTemperature {
+                mirek: Some(366),
+                mirek_schema: MirekSchema::DEFAULT,
+                mirek_valid: true,
+            }),
             color_temperature_delta: Some(Stub),
             dimming_delta: Some(Stub),
             dynamics: Some(Stub),

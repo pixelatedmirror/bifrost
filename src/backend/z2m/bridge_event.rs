@@ -47,6 +47,12 @@ impl Z2mBackend {
                     brightness: b / 254.0 * 100.0,
                 });
             }
+
+            if let Some(ct) = upd.color_temp {
+                if let Some(gct) = &mut glight.color_temperature {
+                    gct.mirek = Some(ct);
+                }
+            }
         })
     }
 

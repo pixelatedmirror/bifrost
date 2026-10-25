@@ -4,8 +4,9 @@ use dioxus::prelude::*;
 use uuid::Uuid;
 
 use hue::api::{
-    ColorTemperatureUpdate, DimmingUpdate, GroupedLightUpdate, MirekSchema, On, Resource,
-    ResourceLink, ResourceRecord, Room, Scene, SceneActive, SceneStatus, SceneUpdate, Stub,
+    ColorTemperature, ColorTemperatureUpdate, DimmingUpdate, GroupedLightUpdate, MirekSchema, On,
+    Resource, ResourceLink, ResourceRecord, Room, Scene, SceneActive, SceneStatus, SceneUpdate,
+    Stub,
 };
 use hue::colorspace::WIDE;
 use hue::colortemp::cct_to_xy;
@@ -74,7 +75,7 @@ pub fn LightDimming(id: Uuid, dimming: Option<DimmingUpdate>) -> Element {
 #[component]
 pub fn LightColorTemperature(
     id: Uuid,
-    color_temperature: Option<Stub>,
+    color_temperature: Option<ColorTemperature>,
 ) -> Element {
     if color_temperature.is_none() {
         return rsx! {};
@@ -98,7 +99,7 @@ pub fn LightColorTemperature(
                     Ok(())
                 }
             },
-            value: None,
+            value: color_temperature.and_then(|ct| ct.mirek),
         }
     }
 }

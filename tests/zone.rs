@@ -1,6 +1,7 @@
 use hue::api::{
-    DimmingUpdate, Group, GroupArchetype, GroupMetadata, GroupedLight, LightAlert, LightSignal,
-    LightSignaling, On, RType, Resource, ResourceLink, Stub, Zone, ZoneNew,
+    ColorTemperature, DimmingUpdate, Group, GroupArchetype, GroupMetadata, GroupedLight,
+    LightAlert, LightSignal, LightSignaling, MirekSchema, On, RType, Resource, ResourceLink, Stub,
+    Zone, ZoneNew,
 };
 #[cfg(test)]
 use pretty_assertions::assert_eq;
@@ -170,7 +171,11 @@ async fn create_zone_and_assert<'a>(
             },),
             dimming: Some(DimmingUpdate { brightness: 0.0 },),
             color: Some(Stub,),
-            color_temperature: Some(Stub,),
+            color_temperature: Some(ColorTemperature {
+                mirek: Some(366),
+                mirek_schema: MirekSchema::DEFAULT,
+                mirek_valid: true,
+            },),
             color_temperature_delta: Some(Stub,),
             dimming_delta: Some(Stub,),
             dynamics: Some(Stub,),

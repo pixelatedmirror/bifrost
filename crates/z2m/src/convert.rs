@@ -251,6 +251,21 @@ impl From<&DeviceUpdate> for LightUpdate {
 
 impl From<&GroupedLightUpdate> for DeviceUpdate {
     fn from(upd: &GroupedLightUpdate) -> Self {
+        let transition = upd
+            .dynamics
+            .as_ref()
+            .and_then(|d| d.duration.map(|duration| f64::from(duration) / 1000.0))
+            .or_else(|| {
+                if upd.dimming.is_some()
+                    || upd.color_temperature.is_some()
+                    || upd.color.is_some()
+                {
+                    Some(0.4)
+                } else {
+                    None
+                }
+            });
+
         Self::default()
             .with_state(upd.on.map(|on| on.on))
             .with_brightness(upd.dimming.map(|dim| dim.brightness / 100.0 * 254.0))
@@ -263,10 +278,6 @@ impl From<&GroupedLightUpdate> for DeviceUpdate {
             }))
             .with_color_temp(upd.color_temperature.and_then(|ct| ct.mirek))
             .with_color_xy(upd.color.map(|col| col.xy))
-            .with_transition(
-                upd.dynamics
-                    .as_ref()
-                    .and_then(|d| d.duration.map(|duration| f64::from(duration) / 1000.0)),
-            )
+            .with_transition(transition)
     }
 }

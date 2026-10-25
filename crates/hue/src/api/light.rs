@@ -1000,9 +1000,20 @@ impl MirekSchema {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct ColorTemperature {
+    #[serde(default)]
     pub mirek: Option<u16>,
+    #[serde(default = "mirek_schema_default")]
     pub mirek_schema: MirekSchema,
+    #[serde(default = "mirek_valid_default")]
     pub mirek_valid: bool,
+}
+
+const fn mirek_schema_default() -> MirekSchema {
+    MirekSchema::DEFAULT
+}
+
+const fn mirek_valid_default() -> bool {
+    true
 }
 
 impl From<ColorTemperature> for Option<ColorTemperatureUpdate> {

@@ -1,5 +1,6 @@
 use hue::api::{
-    DimmingUpdate, GroupedLight, LightAlert, LightSignal, LightSignaling, On, ResourceLink, Stub,
+    ColorTemperature, DimmingUpdate, GroupedLight, LightAlert, LightSignal, LightSignaling,
+    MirekSchema, On, ResourceLink, Stub,
 };
 #[cfg(test)]
 use pretty_assertions::assert_eq;
@@ -43,7 +44,11 @@ fn expected_grouped_light(owner: ResourceLink, on: bool, brightness: f64) -> Gro
         }),
         dimming: Some(DimmingUpdate { brightness }),
         color: Some(Stub),
-        color_temperature: Some(Stub),
+        color_temperature: Some(ColorTemperature {
+            mirek: Some(366),
+            mirek_schema: MirekSchema::DEFAULT,
+            mirek_valid: true,
+        }),
         color_temperature_delta: Some(Stub),
         dimming_delta: Some(Stub),
         dynamics: Some(Stub),
@@ -249,7 +254,7 @@ async fn change_brightness() -> TestResult<()> {
         )
         .await?;
     z2m_requests
-        .expect_set(&grouped_light, json!({"brightness": 63.5}))
+        .expect_set(&grouped_light, json!({"brightness": 63.5, "transition": 0.4}))
         .await?;
 
     hue_events.expect_quiet().await?;
