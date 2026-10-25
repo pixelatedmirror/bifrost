@@ -425,7 +425,7 @@ impl From<HueZigbeeUpdate> for LightUpdate {
                     },
                 });
                 upd.effects_v2 = Some(LightEffectsV2Update {
-                    action: action,
+                    action,
                     status: None,
                 });
                 upd.timed_effects = Some(LightTimedEffectsUpdate::no_effect());

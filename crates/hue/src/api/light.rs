@@ -831,7 +831,7 @@ impl From<&ApiLightStateUpdate> for LightUpdate {
             .with_color_xy(upd.xy.map(Into::into))
             .with_dynamics(
                 upd.transitiontime
-                    .map(|t| LightDynamicsUpdate::new().with_duration(Some(t * 100))),
+                    .map(|t| LightDynamicsUpdate::new().with_duration(Some(u32::from(t) * 100))),
             )
     }
 }

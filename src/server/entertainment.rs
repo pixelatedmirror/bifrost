@@ -4,7 +4,6 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::os::fd::AsFd;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use async_trait::async_trait;

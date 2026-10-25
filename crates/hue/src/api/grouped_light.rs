@@ -7,6 +7,7 @@ use crate::api::{
     ColorTemperature, ColorTemperatureUpdate, ColorUpdate, DimmingDeltaUpdate, DimmingUpdate,
     LightAlert, LightSignal, LightSignaling, MirekSchema, On, ResourceLink, Stub,
 };
+use crate::hs::HS;
 use crate::legacy_api::ApiLightStateUpdate;
 use crate::xy::XY;
 
@@ -139,6 +140,14 @@ impl GroupedLightUpdate {
     }
 
     #[must_use]
+    pub fn with_color_hs(self, hs: impl Into<Option<HS>>) -> Self {
+        Self {
+            color: hs.into().map(|hs| XY::from_hs(hs).0).map(ColorUpdate::new),
+            ..self
+        }
+    }
+
+    #[must_use]
     pub fn with_color_xy(self, val: impl Into<Option<XY>>) -> Self {
         Self {
             color: val.into().map(ColorUpdate::new),
@@ -165,11 +174,13 @@ impl From<&ApiLightStateUpdate> for GroupedLightUpdate {
         Self::new()
             .with_on(upd.on.map(On::new))
             .with_brightness(upd.bri.map(|b| f64::from(b) / 2.54))
+            .with_color_hs(upd.hs.map(Into::into))
             .with_color_xy(upd.xy.map(XY::from))
             .with_color_temperature(upd.ct)
             .with_dynamics(
-                upd.transitiontime
-                    .map(|t| GroupedLightDynamicsUpdate::new().with_duration(Some(t * 100))),
+                upd.transitiontime.map(|t| {
+                    GroupedLightDynamicsUpdate::new().with_duration(Some(u32::from(t) * 100))
+                }),
             )
     }
 }

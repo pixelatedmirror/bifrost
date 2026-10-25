@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
 use maplit::btreeset;
-use serde_json::json;
 use uuid::Uuid;
 
 use hue::api::{

@@ -43,34 +43,41 @@ impl AppState {
         let upd = Arc::new(Mutex::new(VersionUpdater::with_default_version()));
         let swversion = upd.lock().await.get().await.clone();
 
-        if let Ok(fd) = File::open(&config.bifrost.state_file) {
-            log::debug!("Existing state file found, loading..");
-            let yaml = serde_yml::from_reader(fd)?;
-            let state = match State::version(&yaml)? {
-                StateVersion::V0 => {
-                    log::info!("Detected state file version 0. Upgrading to new version..");
-                    let backup_path = &config.bifrost.state_file.with_extension("v0.bak");
-                    fs::rename(&config.bifrost.state_file, backup_path)?;
-                    log::info!("  ..saved old state file as {backup_path}");
-                    State::from_v0(yaml)?
-                }
-                StateVersion::V1 => {
-                    log::info!("Detected state file version 1. Upgrading to new version..");
-                    let backup_path = &config.bifrost.state_file.with_extension("v1.bak");
-                    fs::rename(&config.bifrost.state_file, backup_path)?;
-                    log::info!("  ..saved old state file as {backup_path}");
-                    State::from_v1(yaml)?
-                }
-                StateVersion::V2 => {
-                    log::info!("Detected state file version 2. Loading..");
-                    State::from_v2(yaml)?
-                }
-            };
-            res = Resources::new(swversion, state);
-        } else {
-            log::debug!("No state file found, initializing..");
-            res = Resources::new(swversion, State::new());
-            res.init(&hue::bridge_id(config.bridge.mac))?;
+        match File::open(&config.bifrost.state_file) {
+            Ok(fd) => {
+                log::debug!("Existing state file found, loading..");
+                let yaml = serde_yml::from_reader(fd)?;
+                let state = match State::version(&yaml)? {
+                    StateVersion::V0 => {
+                        log::info!("Detected state file version 0. Upgrading to new version..");
+                        let backup_path = &config.bifrost.state_file.with_extension("v0.bak");
+                        fs::rename(&config.bifrost.state_file, backup_path)?;
+                        log::info!("  ..saved old state file as {backup_path}");
+                        State::from_v0(yaml)?
+                    }
+                    StateVersion::V1 => {
+                        log::info!("Detected state file version 1. Upgrading to new version..");
+                        let backup_path = &config.bifrost.state_file.with_extension("v1.bak");
+                        fs::rename(&config.bifrost.state_file, backup_path)?;
+                        log::info!("  ..saved old state file as {backup_path}");
+                        State::from_v1(yaml)?
+                    }
+                    StateVersion::V2 => {
+                        log::info!("Detected state file version 2. Loading..");
+                        State::from_v2(yaml)?
+                    }
+                };
+                res = Resources::new(swversion, state);
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                log::debug!("No state file found, initializing..");
+                res = Resources::new(swversion, State::new());
+                res.init(&hue::bridge_id(config.bridge.mac))?;
+            }
+            Err(err) => {
+                log::error!("Failed to open existing state file: {err}");
+                return Err(err.into());
+            }
         }
         res.add_clip()?;
 

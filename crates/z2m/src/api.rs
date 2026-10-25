@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt::Display;
-use std::fmt::Write;
 
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;

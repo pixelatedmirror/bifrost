@@ -25,7 +25,6 @@ use crate::backend::z2m::entertainment::EntStream;
 use crate::backend::z2m::websocket::Z2mWebSocket;
 use crate::backend::z2m::{Z2mBackend, Z2mMessage};
 use crate::error::ApiResult;
-use crate::model::state::AuxData;
 
 impl Z2mBackend {
     #[allow(clippy::match_same_arms)]
@@ -217,20 +216,9 @@ impl Z2mBackend {
 
         log::info!("New scene: {link_scene:?} ({})", scene.metadata.name);
 
-        let mut lock = self.state.lock().await;
-
-        let auxdata = AuxData::new()
-            .with_topic(&scene.metadata.name)
-            .with_index(sid);
-
-        lock.aux_set(link_scene, auxdata);
-
         z2mws
             .send_scene_store(topic, &scene.metadata.name, sid)
             .await?;
-
-        lock.add(link_scene, Resource::Scene(scene.clone()))?;
-        drop(lock);
 
         Ok(())
     }
@@ -241,64 +229,49 @@ impl Z2mBackend {
         link: &ResourceLink,
         upd: &SceneUpdate,
     ) -> ApiResult<()> {
-        let mut lock = self.state.lock().await;
+        let (index, group, should_recall) = {
+            let mut lock = self.state.lock().await;
 
-        let scene = lock.get::<Scene>(link)?;
+            let group = lock.get::<Scene>(link)?.group;
+            let index = lock
+                .aux_get(link)?
+                .index
+                .ok_or(HueError::NotFound(link.rid))?;
 
-        let index = lock
-            .aux_get(link)?
-            .index
-            .ok_or(HueError::NotFound(link.rid))?;
-
-        if let Some(recall) = &upd.recall {
-            if recall.action == Some(SceneStatusEnum::Active) {
-                let scenes = lock.get_scenes_for_group(&scene.group.rid);
-                for rid in scenes {
-                    lock.update::<Scene>(&rid, |scn| {
-                        scn.status = Some(SceneStatus {
-                            active: if rid == link.rid {
-                                SceneActive::Static
-                            } else {
-                                SceneActive::Inactive
-                            },
-                            last_recall: None,
-                        });
-                    })?;
-                }
-
-                let group = lock.get::<Scene>(link)?.group;
-                drop(lock);
-
-                if let Some(topic) = self.rmap.get(&group).cloned() {
-                    log::info!("[{}] Recall scene: {link:?}", self.name);
-
-                    let mut lock = self.state.lock().await;
+            if let Some(recall) = &upd.recall {
+                if recall.action == Some(SceneStatusEnum::Active)
+                    || recall.action == Some(SceneStatusEnum::Static)
+                {
+                    let scenes = lock.get_scenes_for_group(&group.rid);
+                    for rid in scenes {
+                        lock.update::<Scene>(&rid, |scn| {
+                            scn.status = Some(SceneStatus {
+                                active: if rid == link.rid {
+                                    SceneActive::Static
+                                } else {
+                                    SceneActive::Inactive
+                                },
+                                last_recall: None,
+                            });
+                        })?;
+                    }
                     self.learner.learn_scene_recall(link, &mut lock)?;
-
-                    z2mws.send_scene_recall(&topic, index).await?;
+                    (index, group, true)
+                } else {
+                    log::error!("Scene recall type not supported: {recall:?}");
+                    return Ok(());
                 }
             } else {
-                log::error!("Scene recall type not supported: {recall:?}");
+                // If not recalling, this is a metadata update (e.g. name change).
+                // Do NOT call send_scene_store here, as that snapshots the current live bulb states.
+                return Ok(());
             }
-        } else {
-            // We're not recalling the scene, so we are updating the scene
-            let group = lock.get::<Scene>(link)?.group;
+        };
 
+        if should_recall {
             if let Some(topic) = self.rmap.get(&group).cloned() {
-                log::info!("[{}] Store scene: {link:?}", self.name);
-
-                let scene = lock.get::<Scene>(link)?;
-                z2mws
-                    .send_scene_store(&topic, &scene.metadata.name, index)
-                    .await?;
-
-                // We have requested z2m to update the scene, so update
-                // the state database accordingly
-                lock.update::<Scene>(&link.rid, |scene| {
-                    *scene += upd;
-                })?;
-
-                drop(lock);
+                log::info!("[{}] Recall scene: {link:?}", self.name);
+                z2mws.send_scene_recall(&topic, index).await?;
             }
         }
 
@@ -311,17 +284,20 @@ impl Z2mBackend {
         link: &ResourceLink,
         upd: &GroupedLightUpdate,
     ) -> ApiResult<()> {
-        let owner = self.state.lock().await.get::<GroupedLight>(link)?.owner;
+        let (owner, aux_topic) = {
+            let lock = self.state.lock().await;
+            let owner = lock.get::<GroupedLight>(link)?.owner;
+            let topic = lock
+                .aux_get(&owner)
+                .ok()
+                .and_then(|a| a.topic.clone())
+                .or_else(|| lock.aux_get(link).ok().and_then(|a| a.topic.clone()));
+            (owner, topic)
+        };
 
         match owner.rtype {
             RType::Room | RType::Zone => {
-                let topic = self.rmap.get(&owner).cloned().or_else(|| {
-                    let lock = self.state.blocking_lock();
-                    lock.aux_get(&owner)
-                        .ok()
-                        .and_then(|a| a.topic.clone())
-                        .or_else(|| lock.aux_get(link).ok().and_then(|a| a.topic.clone()))
-                });
+                let topic = self.rmap.get(&owner).cloned().or(aux_topic);
                 if let Some(topic) = topic {
                     z2mws.send_update(&topic, &upd.into()).await?;
                 } else {
@@ -751,13 +727,12 @@ impl Z2mBackend {
 
     async fn backend_entertainment_stop(&mut self, z2mws: &mut Z2mWebSocket) -> ApiResult<()> {
         log::debug!("Stopping entertainment mode..");
-        if let Some(es) = &mut self.entstream.take() {
-            let mut lock = self.state.lock().await;
-
+        if let Some(mut es) = self.entstream.take() {
             es.reset_stream(z2mws).await?;
 
             self.counter = es.stream.counter();
 
+            let mut lock = self.state.lock().await;
             for id in lock.get_resource_ids_by_type(RType::Light) {
                 let light: &Light = lock.get_id(id)?;
                 if light.is_streaming() {

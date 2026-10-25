@@ -46,7 +46,13 @@ impl IntoResponse for BifrostApiError {
 }
 
 async fn get_config(State(state): State<AppState>) -> BifrostApiResult<Json<AppConfig>> {
-    Ok(Json((*state.config()).clone()))
+    let mut config = (*state.config()).clone();
+    for server in config.z2m.servers.values_mut() {
+        if let Ok(sanitized_url) = server.get_sanitized_url().parse() {
+            server.url = sanitized_url;
+        }
+    }
+    Ok(Json(config))
 }
 
 pub fn router() -> Router<AppState> {
