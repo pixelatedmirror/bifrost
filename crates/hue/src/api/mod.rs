@@ -84,8 +84,7 @@ use serde_json::{Value, from_value, json};
 use crate::error::{HueError, HueResult};
 use crate::legacy_api::ApiLightStateUpdate;
 
-#[derive(Debug, Deserialize, Clone, Default, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Stub;
 
 impl Serialize for Stub {
@@ -94,6 +93,47 @@ impl Serialize for Stub {
         S: serde::Serializer,
     {
         serializer.serialize_map(None)?.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Stub {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct StubVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for StubVisitor {
+            type Value = Stub;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("empty map, unit, or null")
+            }
+
+            fn visit_unit<E>(self) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Stub)
+            }
+
+            fn visit_none<E>(self) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Stub)
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::MapAccess<'de>,
+            {
+                while let Some((_, _)) = map.next_entry::<serde::de::IgnoredAny, serde::de::IgnoredAny>()? {}
+                Ok(Stub)
+            }
+        }
+
+        deserializer.deserialize_any(StubVisitor)
     }
 }
 
@@ -470,5 +510,21 @@ impl<'a> V1Reply<'a> {
             json.push(json!({"success": {format!("{prefix}/{name}"): value}}));
         }
         json!(json)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stub_deserialize_map_and_unit() {
+        let json_empty_map = "{}";
+        let stub: Stub = serde_json::from_str(json_empty_map).expect("deserialize from empty map");
+        assert_eq!(stub, Stub);
+
+        let json_null = "null";
+        let stub_null: Stub = serde_json::from_str(json_null).expect("deserialize from null");
+        assert_eq!(stub_null, Stub);
     }
 }
