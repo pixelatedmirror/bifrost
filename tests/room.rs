@@ -237,7 +237,7 @@ async fn create_room() -> TestResult<()> {
             },),
             dimming: Some(DimmingUpdate { brightness: 0.0 },),
             color: Some(Stub,),
-            color_temperature: None,
+            color_temperature: Some(Stub,),
             color_temperature_delta: Some(Stub,),
             dimming_delta: Some(Stub,),
             dynamics: Some(Stub,),

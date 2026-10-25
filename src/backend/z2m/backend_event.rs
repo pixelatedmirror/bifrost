@@ -315,8 +315,19 @@ impl Z2mBackend {
 
         match owner.rtype {
             RType::Room | RType::Zone => {
-                if let Some(topic) = self.rmap.get(&owner) {
-                    z2mws.send_update(topic, &upd.into()).await?;
+                let topic = self.rmap.get(&owner).cloned().or_else(|| {
+                    let lock = self.state.blocking_lock();
+                    lock.aux_get(&owner)
+                        .ok()
+                        .and_then(|a| a.topic.clone())
+                        .or_else(|| lock.aux_get(link).ok().and_then(|a| a.topic.clone()))
+                });
+                if let Some(topic) = topic {
+                    z2mws.send_update(&topic, &upd.into()).await?;
+                } else {
+                    log::warn!(
+                        "Unable to find topic for grouped_light owner {owner:?} (link: {link:?})"
+                    );
                 }
             }
             RType::BridgeHome => {
