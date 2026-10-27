@@ -20,6 +20,7 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::extract::connect_info::IntoMakeServiceWithConnectInfo;
 use axum::extract::{ConnectInfo, Request};
+use axum::http::Method;
 use axum::response::Response;
 use axum::{Router, ServiceExt};
 
@@ -31,7 +32,7 @@ use tower::Layer;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::normalize_path::{NormalizePath, NormalizePathLayer};
 use tower_http::trace::TraceLayer;
-use tracing::{Span, info_span};
+use tracing::{Span, debug_span, info_span};
 
 use crate::error::ApiResult;
 use crate::resource::Resources;
@@ -51,21 +52,45 @@ fn trace_layer_make_span_with(request: &Request, protocol: Protocol) -> Span {
         .get::<ConnectInfo<SocketAddr>>()
         .map_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED), |ci| ci.0.ip());
 
-    match protocol {
-        Protocol::Https => info_span!(
-            "https",
-            client = ?addr,
-            method = ?request.method(),
-            uri = ?request.uri(),
-            status = tracing::field::Empty,
-        ),
-        Protocol::Http => info_span!(
-            "http",
-            client = ?addr,
-            method = ?request.method(),
-            uri = ?request.uri(),
-            status = tracing::field::Empty,
-        ),
+    let is_read_only = matches!(
+        *request.method(),
+        Method::GET | Method::HEAD | Method::OPTIONS
+    );
+
+    if is_read_only {
+        match protocol {
+            Protocol::Https => debug_span!(
+                "https",
+                client = ?addr,
+                method = ?request.method(),
+                uri = ?request.uri(),
+                status = tracing::field::Empty,
+            ),
+            Protocol::Http => debug_span!(
+                "http",
+                client = ?addr,
+                method = ?request.method(),
+                uri = ?request.uri(),
+                status = tracing::field::Empty,
+            ),
+        }
+    } else {
+        match protocol {
+            Protocol::Https => info_span!(
+                "https",
+                client = ?addr,
+                method = ?request.method(),
+                uri = ?request.uri(),
+                status = tracing::field::Empty,
+            ),
+            Protocol::Http => info_span!(
+                "http",
+                client = ?addr,
+                method = ?request.method(),
+                uri = ?request.uri(),
+                status = tracing::field::Empty,
+            ),
+        }
     }
 }
 
