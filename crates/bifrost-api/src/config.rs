@@ -51,6 +51,8 @@ pub struct Z2mServer {
     pub group_prefix: Option<String>,
     pub disable_tls_verify: Option<bool>,
     pub streaming_fps: Option<NonZeroU32>,
+    #[serde(default)]
+    pub rate_limit_ms: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]

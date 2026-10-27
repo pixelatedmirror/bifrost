@@ -125,6 +125,8 @@ impl Z2mBackend {
             return Ok(());
         };
 
+        self.coalescer.notify_ack(val);
+
         if val.rtype == RType::Device {
             return Ok(());
         }

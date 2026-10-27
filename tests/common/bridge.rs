@@ -236,7 +236,12 @@ impl TestBridge {
     ) -> TestResult<AppConfig> {
         let z2m = z2m_addresses
             .into_iter()
-            .map(|(name, address)| (name, json!({"url": format!("ws://{address}/api")})))
+            .map(|(name, address)| {
+                (
+                    name,
+                    json!({"url": format!("ws://{address}/api"), "rate_limit_ms": 0}),
+                )
+            })
             .collect::<BTreeMap<_, _>>();
 
         Ok(serde_json::from_value(json!({

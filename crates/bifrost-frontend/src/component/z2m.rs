@@ -86,7 +86,8 @@ pub fn Z2mServerAdd(show: Signal<bool>) -> Element {
                             url: Url::parse(&url.read())?,
                             group_prefix: if group_prefix.read().is_empty() { None } else { Some(group_prefix.read().to_string())},
                             disable_tls_verify: None,
-                            streaming_fps: (*streaming_fps.read()).and_then(|fps| NonZeroU32::try_from(fps).ok())
+                            streaming_fps: (*streaming_fps.read()).and_then(|fps| NonZeroU32::try_from(fps).ok()),
+                            rate_limit_ms: None,
                         };
 
                         /* if let Err(err) = CLIENT.post_backend(&form.name, form.server).await { */

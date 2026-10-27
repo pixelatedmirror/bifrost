@@ -90,13 +90,14 @@ impl Z2mBackend {
         Ok(hz)
     }
 
-    async fn backend_light_update(
-        &self,
+    pub(super) async fn backend_light_update(
+        &mut self,
         z2mws: &mut Z2mWebSocket,
         link: &ResourceLink,
         upd: &LightUpdate,
     ) -> ApiResult<()> {
         let Some(topic) = self.rmap.get(link) else {
+            self.coalescer.clear_in_flight(link);
             return Ok(());
         };
 
@@ -169,7 +170,10 @@ impl Z2mBackend {
         }
 
         if let Some(payload) = payload {
-            z2mws.send_update(topic, &payload).await?;
+            if let Err(e) = z2mws.send_update(topic, &payload).await {
+                self.coalescer.clear_in_flight(link);
+                return Err(e);
+            }
         }
 
         /* if supported send hue-specific effects update */
@@ -184,7 +188,8 @@ impl Z2mBackend {
 
                 // Do an explicit attribute read since Hue specific updates do not automatically update z2m state
                 let tx = self.message_tx.clone();
-                let topic = topic.clone();
+                let topic_name = topic.clone();
+                let pending_reads = self.pending_reads.clone();
                 let transition_duration = Duration::from_millis(
                     upd.dynamics
                         .clone()
@@ -192,11 +197,21 @@ impl Z2mBackend {
                         .unwrap_or(500)
                         .into(),
                 );
-                let _job = tokio::spawn(async move {
-                    // wait until transition is done
-                    sleep(transition_duration).await;
-                    tx.send((topic, Z2mMessage::DeviceRead(read_payload)))
-                });
+                if let Ok(mut lock) = self.pending_reads.lock() {
+                    if let Some(old_job) = lock.remove(topic) {
+                        old_job.abort();
+                    }
+                    let topic_for_map = topic.clone();
+                    let job = tokio::spawn(async move {
+                        // wait until transition is done
+                        sleep(transition_duration).await;
+                        let _ = tx.send((topic_name.clone(), Z2mMessage::DeviceRead(read_payload)));
+                        if let Ok(mut lock) = pending_reads.lock() {
+                            lock.remove(&topic_name);
+                        }
+                    });
+                    lock.insert(topic_for_map, job);
+                }
             }
         }
 
@@ -278,8 +293,8 @@ impl Z2mBackend {
         Ok(())
     }
 
-    async fn backend_grouped_light_update(
-        &self,
+    pub(super) async fn backend_grouped_light_update(
+        &mut self,
         z2mws: &mut Z2mWebSocket,
         link: &ResourceLink,
         upd: &GroupedLightUpdate,
@@ -299,8 +314,12 @@ impl Z2mBackend {
             RType::Room | RType::Zone => {
                 let topic = self.rmap.get(&owner).cloned().or(aux_topic);
                 if let Some(topic) = topic {
-                    z2mws.send_update(&topic, &upd.into()).await?;
+                    if let Err(e) = z2mws.send_update(&topic, &upd.into()).await {
+                        self.coalescer.clear_in_flight(link);
+                        return Err(e);
+                    }
                 } else {
+                    self.coalescer.clear_in_flight(link);
                     log::warn!(
                         "Unable to find topic for grouped_light owner {owner:?} (link: {link:?})"
                     );
@@ -770,7 +789,11 @@ impl Z2mBackend {
 
         match &*req {
             BackendRequest::LightUpdate(link, upd) => {
-                self.backend_light_update(z2mws, link, upd).await
+                if let Some(immediate) = self.coalescer.submit_light(link, upd.clone()) {
+                    self.backend_light_update(z2mws, link, &immediate).await
+                } else {
+                    Ok(())
+                }
             }
 
             BackendRequest::SceneCreate(link, sid, scene) => {
@@ -782,7 +805,12 @@ impl Z2mBackend {
             }
 
             BackendRequest::GroupedLightUpdate(link, upd) => {
-                self.backend_grouped_light_update(z2mws, link, upd).await
+                if let Some(immediate) = self.coalescer.submit_grouped_light(link, upd.clone()) {
+                    self.backend_grouped_light_update(z2mws, link, &immediate)
+                        .await
+                } else {
+                    Ok(())
+                }
             }
 
             BackendRequest::RoomCreate {

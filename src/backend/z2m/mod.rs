@@ -2,6 +2,7 @@ mod backend_event;
 mod bridge_event;
 mod bridge_import;
 mod button;
+pub mod coalesce;
 pub mod entertainment;
 mod group;
 pub mod learn;
@@ -33,6 +34,7 @@ use z2m::api::DeviceRead;
 use z2m::update::DeviceUpdate;
 
 use crate::backend::z2m::button::Z2mButtonHandler;
+use crate::backend::z2m::coalesce::{PendingUpdate, UpdateCoalescer};
 use crate::backend::z2m::entertainment::EntStream;
 use crate::backend::z2m::learn::SceneLearn;
 use crate::backend::z2m::websocket::Z2mWebSocket;
@@ -92,6 +94,8 @@ pub struct Z2mBackend {
     counter: u32,
     _fps: u32,
     throttle: Throttle,
+    coalescer: UpdateCoalescer,
+    pending_reads: Arc<std::sync::Mutex<HashMap<String, tokio::task::JoinHandle<()>>>>,
     socket: Option<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     button_handlers: HashMap<ResourceLink, Arc<Mutex<Z2mButtonHandler>>>,
 
@@ -102,6 +106,7 @@ pub struct Z2mBackend {
 
 impl Z2mBackend {
     const DEFAULT_FPS: u32 = 20;
+    const DEFAULT_RATE_LIMIT: Duration = Duration::from_millis(100);
     const LIGHT_BREATHE_DURATION: Duration = Duration::from_secs(2);
 
     pub fn new(
@@ -111,6 +116,11 @@ impl Z2mBackend {
         state: Arc<Mutex<Resources>>,
     ) -> ApiResult<Self> {
         let fps = server.streaming_fps.map_or(Self::DEFAULT_FPS, u32::from);
+        let rate_limit = server
+            .rate_limit_ms
+            .map_or(Self::DEFAULT_RATE_LIMIT, Duration::from_millis);
+        let coalescer = UpdateCoalescer::new(rate_limit);
+        let pending_reads = Arc::new(std::sync::Mutex::new(HashMap::new()));
         let map = HashMap::new();
         let rmap = HashMap::new();
         let ignore = HashSet::new();
@@ -135,6 +145,8 @@ impl Z2mBackend {
             entstream,
             throttle,
             _fps: fps,
+            coalescer,
+            pending_reads,
             message_rx,
             message_tx,
             button_handlers,
@@ -149,18 +161,47 @@ impl Z2mBackend {
         mut socket: Z2mWebSocket,
     ) -> ApiResult<()> {
         loop {
+            let earliest_deadline = self.coalescer.earliest_deadline();
+            let has_pending = earliest_deadline.is_some();
+            let sleep_deadline = earliest_deadline.unwrap_or_else(tokio::time::Instant::now);
+
             select! {
-                // all backend event handling implemented in backend::z2m::backend_event
-                pkt = chan.recv() => {
-                    let api_req = pkt?;
-                    self.handle_backend_event(&mut socket, api_req).await?;
-                    // FIXME: this used to be our "throttle" feature, but it breaks entertainment mode
-                    /* tokio::time::sleep(std::time::Duration::from_millis(100)).await; */
+                biased;
+
+                _ = tokio::time::sleep_until(sleep_deadline), if has_pending => {
+                    let ready = self.coalescer.take_ready();
+                    for (link, pending) in ready {
+                        match pending {
+                            PendingUpdate::Light(upd) => {
+                                self.backend_light_update(&mut socket, &link, &upd).await?;
+                            }
+                            PendingUpdate::GroupedLight(upd) => {
+                                self.backend_grouped_light_update(&mut socket, &link, &upd).await?;
+                            }
+                        }
+                    }
                 },
 
                 // all bridge event handling implemented in backend::z2m::bridge_event
                 pkt = socket.next() => {
                     self.handle_bridge_event(pkt.ok_or(ApiError::UnexpectedZ2mEof)??).await?;
+                    let ready = self.coalescer.take_ready();
+                    for (link, pending) in ready {
+                        match pending {
+                            PendingUpdate::Light(upd) => {
+                                self.backend_light_update(&mut socket, &link, &upd).await?;
+                            }
+                            PendingUpdate::GroupedLight(upd) => {
+                                self.backend_grouped_light_update(&mut socket, &link, &upd).await?;
+                            }
+                        }
+                    }
+                },
+
+                // all backend event handling implemented in backend::z2m::backend_event
+                pkt = chan.recv() => {
+                    let api_req = pkt?;
+                    self.handle_backend_event(&mut socket, api_req).await?;
                 },
 
                 Some((topic, message)) = self.message_rx.recv() => {
