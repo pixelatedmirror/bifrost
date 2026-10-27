@@ -1,7 +1,9 @@
 use hue::api::{
-    ColorTemperature, DimmingUpdate, Group, GroupArchetype, GroupMetadata, GroupedLight,
-    LightAlert, LightSignal, LightSignaling, MirekSchema, On, RType, Resource, Room, RoomNew, Stub,
+    ColorGamut, ColorTemperature, DimmingUpdate, GamutType, Group, GroupArchetype, GroupMetadata,
+    GroupedLight, LightAlert, LightColor, LightSignal, LightSignaling, MirekSchema, On, RType,
+    Resource, Room, RoomNew, Stub,
 };
+use hue::xy::XY;
 #[cfg(test)]
 use pretty_assertions::assert_eq;
 use serde_json::{Value, json};
@@ -236,7 +238,14 @@ async fn create_room() -> TestResult<()> {
                 action_values: BTreeSet::from(["breathe".to_string()]),
             },),
             dimming: Some(DimmingUpdate { brightness: 0.0 },),
-            color: Some(Stub,),
+            color: Some(LightColor {
+                gamut: Some(ColorGamut::GAMUT_C),
+                gamut_type: GamutType::C,
+                xy: XY {
+                    x: 0.3151,
+                    y: 0.3224,
+                },
+            },),
             color_temperature: Some(ColorTemperature {
                 mirek: Some(366),
                 mirek_schema: MirekSchema::DEFAULT,

@@ -1,7 +1,8 @@
 use hue::api::{
-    ColorTemperature, DimmingUpdate, GroupedLight, LightAlert, LightSignal, LightSignaling,
-    MirekSchema, On, ResourceLink, Stub,
+    ColorGamut, ColorTemperature, DimmingUpdate, GamutType, GroupedLight, LightAlert, LightColor,
+    LightSignal, LightSignaling, MirekSchema, On, ResourceLink, Stub,
 };
+use hue::xy::XY;
 #[cfg(test)]
 use pretty_assertions::assert_eq;
 use serde_json::{Value, json};
@@ -43,7 +44,14 @@ fn expected_grouped_light(owner: ResourceLink, on: bool, brightness: f64) -> Gro
             action_values: BTreeSet::from(["breathe".to_string()]),
         }),
         dimming: Some(DimmingUpdate { brightness }),
-        color: Some(Stub),
+        color: Some(LightColor {
+            gamut: Some(ColorGamut::GAMUT_C),
+            gamut_type: GamutType::C,
+            xy: XY {
+                x: 0.3151,
+                y: 0.3224,
+            },
+        }),
         color_temperature: Some(ColorTemperature {
             mirek: Some(366),
             mirek_schema: MirekSchema::DEFAULT,

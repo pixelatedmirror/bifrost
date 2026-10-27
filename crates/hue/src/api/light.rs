@@ -819,6 +819,78 @@ impl LightUpdate {
             ..self
         }
     }
+
+    pub fn merge(&mut self, other: Self) {
+        if other.metadata.is_some() {
+            self.metadata = other.metadata;
+        }
+        if other.on.is_some() {
+            self.on = other.on;
+        }
+        if other.dimming.is_some() {
+            self.dimming = other.dimming;
+            self.dimming_delta = None;
+        } else if let Some(other_delta) = other.dimming_delta {
+            if let Some(existing_delta) = &mut self.dimming_delta {
+                let existing_val = match existing_delta.action {
+                    DimmingDeltaAction::Up => existing_delta.brightness_delta,
+                    DimmingDeltaAction::Down => -existing_delta.brightness_delta,
+                };
+                let other_val = match other_delta.action {
+                    DimmingDeltaAction::Up => other_delta.brightness_delta,
+                    DimmingDeltaAction::Down => -other_delta.brightness_delta,
+                };
+                let total = existing_val + other_val;
+                if total >= 0.0 {
+                    existing_delta.action = DimmingDeltaAction::Up;
+                    existing_delta.brightness_delta = total;
+                } else {
+                    existing_delta.action = DimmingDeltaAction::Down;
+                    existing_delta.brightness_delta = -total;
+                }
+            } else {
+                self.dimming_delta = Some(other_delta);
+            }
+        }
+        if other.color.is_some() {
+            self.color = other.color;
+            self.color_temperature = None;
+        }
+        if other.color_temperature.is_some() {
+            self.color_temperature = other.color_temperature;
+            self.color = None;
+        }
+        if other.content_configuration.is_some() {
+            self.content_configuration = other.content_configuration;
+        }
+        if other.gradient.is_some() {
+            self.gradient = other.gradient;
+        }
+        if other.effects.is_some() {
+            self.effects = other.effects;
+        }
+        if other.effects_v2.is_some() {
+            self.effects_v2 = other.effects_v2;
+        }
+        if other.service_id.is_some() {
+            self.service_id = other.service_id;
+        }
+        if other.owner.is_some() {
+            self.owner = other.owner;
+        }
+        if other.powerup.is_some() {
+            self.powerup = other.powerup;
+        }
+        if other.dynamics.is_some() {
+            self.dynamics = other.dynamics;
+        }
+        if other.identify.is_some() {
+            self.identify = other.identify;
+        }
+        if other.timed_effects.is_some() {
+            self.timed_effects = other.timed_effects;
+        }
+    }
 }
 
 impl From<&ApiLightStateUpdate> for LightUpdate {
@@ -970,8 +1042,21 @@ pub enum GamutType {
 pub struct LightColor {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gamut: Option<ColorGamut>,
+    #[serde(default = "default_gamut_type")]
     pub gamut_type: GamutType,
+    #[serde(default = "default_xy")]
     pub xy: XY,
+}
+
+const fn default_gamut_type() -> GamutType {
+    GamutType::C
+}
+
+const fn default_xy() -> XY {
+    XY {
+        x: 0.3151,
+        y: 0.3224,
+    }
 }
 
 impl LightColor {

@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{
-    ColorTemperature, ColorTemperatureUpdate, ColorUpdate, DimmingDeltaUpdate, DimmingUpdate,
-    LightAlert, LightSignal, LightSignaling, MirekSchema, On, ResourceLink, Stub,
+    ColorGamut, ColorTemperature, ColorTemperatureUpdate, ColorUpdate, DimmingDeltaAction,
+    DimmingDeltaUpdate, DimmingUpdate, GamutType, LightAlert, LightColor, LightSignal,
+    LightSignaling, MirekSchema, On, ResourceLink, Stub,
 };
 use crate::hs::HS;
 use crate::legacy_api::ApiLightStateUpdate;
@@ -18,7 +19,7 @@ pub struct GroupedLight {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dimming: Option<DimmingUpdate>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub color: Option<Stub>,
+    pub color: Option<LightColor>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color_temperature: Option<ColorTemperature>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -42,7 +43,14 @@ impl GroupedLight {
                 action_values: BTreeSet::from([String::from("breathe")]),
             }),
             dimming: Some(DimmingUpdate { brightness: 0.0 }),
-            color: Some(Stub),
+            color: Some(LightColor {
+                gamut: Some(ColorGamut::GAMUT_C),
+                gamut_type: GamutType::C,
+                xy: XY {
+                    x: 0.3151,
+                    y: 0.3224,
+                },
+            }),
             color_temperature: Some(ColorTemperature {
                 mirek: Some(366),
                 mirek_schema: MirekSchema::DEFAULT,
@@ -164,6 +172,51 @@ impl GroupedLightUpdate {
         Self {
             dimming_delta,
             ..self
+        }
+    }
+
+    pub fn merge(&mut self, other: Self) {
+        if other.on.is_some() {
+            self.on = other.on;
+        }
+        if other.dimming.is_some() {
+            self.dimming = other.dimming;
+            self.dimming_delta = None;
+        } else if let Some(other_delta) = other.dimming_delta {
+            if let Some(existing_delta) = &mut self.dimming_delta {
+                let existing_val = match existing_delta.action {
+                    DimmingDeltaAction::Up => existing_delta.brightness_delta,
+                    DimmingDeltaAction::Down => -existing_delta.brightness_delta,
+                };
+                let other_val = match other_delta.action {
+                    DimmingDeltaAction::Up => other_delta.brightness_delta,
+                    DimmingDeltaAction::Down => -other_delta.brightness_delta,
+                };
+                let total = existing_val + other_val;
+                if total >= 0.0 {
+                    existing_delta.action = DimmingDeltaAction::Up;
+                    existing_delta.brightness_delta = total;
+                } else {
+                    existing_delta.action = DimmingDeltaAction::Down;
+                    existing_delta.brightness_delta = -total;
+                }
+            } else {
+                self.dimming_delta = Some(other_delta);
+            }
+        }
+        if other.color.is_some() {
+            self.color = other.color;
+            self.color_temperature = None;
+        }
+        if other.color_temperature.is_some() {
+            self.color_temperature = other.color_temperature;
+            self.color = None;
+        }
+        if other.owner.is_some() {
+            self.owner = other.owner;
+        }
+        if other.dynamics.is_some() {
+            self.dynamics = other.dynamics;
         }
     }
 }

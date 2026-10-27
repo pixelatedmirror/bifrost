@@ -4,16 +4,18 @@ use maplit::btreeset;
 use uuid::Uuid;
 
 use hue::api::{
-    BridgeHome, Button, ContentConfiguration, ContentConfigurationOrder,
-    ContentConfigurationOrientation, ContentConfigurationStatusType, DeviceArchetype,
-    DeviceProductData, Entertainment, EntertainmentSegment, EntertainmentSegments, GroupArchetype,
-    GroupMetadata, GroupedLight, Light, LightEffects, LightEffectsV2, LightMetadata,
-    LightTimedEffect, LightTimedEffects, Metadata, OrderType, OrientationType, RType, Resource,
-    ResourceLink, Room, Scene, SceneActive, SceneMetadata, ScenePalette, SceneRecall, SceneStatus,
-    Stub, Taurus, ZigbeeConnectivity, ZigbeeConnectivityStatus, Zone,
+    BridgeHome, Button, ColorGamut, ColorTemperature, ContentConfiguration,
+    ContentConfigurationOrder, ContentConfigurationOrientation, ContentConfigurationStatusType,
+    DeviceArchetype, DeviceProductData, Entertainment, EntertainmentSegment, EntertainmentSegments,
+    GamutType, GroupArchetype, GroupMetadata, GroupedLight, Light, LightColor, LightEffects,
+    LightEffectsV2, LightMetadata, LightTimedEffect, LightTimedEffects, Metadata, MirekSchema,
+    OrderType, OrientationType, RType, Resource, ResourceLink, Room, Scene, SceneActive,
+    SceneMetadata, ScenePalette, SceneRecall, SceneStatus, Stub, Taurus, ZigbeeConnectivity,
+    ZigbeeConnectivityStatus, Zone,
 };
 use hue::devicedb::gradient_product_data;
 use hue::scene_icons;
+use hue::xy::XY;
 use z2m::api::{ExposeLight, ExposeSwitch};
 use z2m::convert::{
     ExtractColorTemperature, ExtractDeviceProductData, ExtractDimming, ExtractLightColor,
@@ -407,7 +409,7 @@ impl Z2mBackend {
             .find_grouped_light(&lock, grp.id, &topic)?
             .unwrap_or_else(|| RType::GroupedLight.deterministic((&self.name, grp.id)));
 
-        let glight = if let Ok(glight) = lock.get::<GroupedLight>(&link_glight).cloned() {
+        let mut glight = if let Ok(glight) = lock.get::<GroupedLight>(&link_glight).cloned() {
             glight
         } else {
             let link_room = RType::Room.deterministic(link_glight.rid);
@@ -415,6 +417,34 @@ impl Z2mBackend {
             lock.add(&link_glight, Resource::GroupedLight(glight.clone()))?;
             glight
         };
+        let mut needs_update = false;
+        if glight.color_temperature.is_none() {
+            glight.color_temperature = Some(ColorTemperature {
+                mirek: Some(366),
+                mirek_schema: MirekSchema::DEFAULT,
+                mirek_valid: true,
+            });
+            needs_update = true;
+        }
+        if glight.color.is_none() {
+            glight.color = Some(LightColor {
+                gamut: Some(ColorGamut::GAMUT_C),
+                gamut_type: GamutType::C,
+                xy: XY {
+                    x: 0.3151,
+                    y: 0.3224,
+                },
+            });
+            needs_update = true;
+        }
+        if needs_update {
+            let ct = glight.color_temperature.clone();
+            let col = glight.color.clone();
+            lock.update(&link_glight.rid, |g: &mut GroupedLight| {
+                g.color_temperature = ct;
+                g.color = col;
+            })?;
+        }
         let owner_link = glight.owner;
         self.set_group_aux(&mut lock, link_glight, grp.id, Some(&topic));
         drop(lock);
