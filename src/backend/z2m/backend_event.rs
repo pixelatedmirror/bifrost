@@ -10,9 +10,9 @@ use uuid::Uuid;
 
 use bifrost_api::backend::{BackendRequest, DeleteReply, RequestReply};
 use hue::api::{
-    BridgeHome, ColorTemperatureUpdate, DimmingDeltaAction, Entertainment,
+    BridgeHome, ColorTemperatureUpdate, Device, DimmingDeltaAction, Entertainment,
     EntertainmentConfiguration, Group, GroupedLight, GroupedLightUpdate, Light,
-    LightEffectsV2Update, LightUpdate, RType, Resource, ResourceLink, Room, RoomNew, RoomUpdate,
+    LightEffectsV2Update, LightUpdate, On, RType, Resource, ResourceLink, Room, RoomNew, RoomUpdate,
     Scene, SceneActive, SceneStatus, SceneStatusEnum, SceneUpdate, ZigbeeDeviceDiscoveryUpdate,
     Zone, ZoneNew, ZoneUpdate,
 };
@@ -31,20 +31,27 @@ impl Z2mBackend {
     fn make_hue_specific_update(upd: &LightUpdate) -> ApiResult<HueZigbeeUpdate> {
         let mut hz = HueZigbeeUpdate::new();
 
+        let turning_off = matches!(upd.on, Some(On { on: false }))
+            || upd.dimming.map_or(false, |d| d.brightness <= 0.01);
+
         if let Some(on) = &upd.on {
             hz = hz.with_on_off(on.on);
+        } else if turning_off {
+            hz = hz.with_on_off(false);
         }
 
-        if let Some(br) = &upd.dimming {
-            hz = hz.with_brightness((br.brightness / 100.0).unit_to_u8_clamped_light());
-        }
+        if !turning_off {
+            if let Some(br) = &upd.dimming {
+                hz = hz.with_brightness((br.brightness / 100.0).unit_to_u8_clamped_light());
+            }
 
-        if let Some(ColorTemperatureUpdate { mirek: Some(mirek) }) = upd.color_temperature {
-            hz = hz.with_color_mirek(mirek);
-        }
+            if let Some(ColorTemperatureUpdate { mirek: Some(mirek) }) = upd.color_temperature {
+                hz = hz.with_color_mirek(mirek);
+            }
 
-        if let Some(xy) = &upd.color {
-            hz = hz.with_color_xy(xy.xy);
+            if let Some(xy) = &upd.color {
+                hz = hz.with_color_xy(xy.xy);
+            }
         }
 
         if let Some(grad) = &upd.gradient {
@@ -101,13 +108,11 @@ impl Z2mBackend {
             return Ok(());
         };
 
-        let hue_effects = self
-            .state
-            .lock()
-            .await
-            .get::<Light>(link)?
-            .effects
-            .is_some();
+        let (is_currently_on, hue_effects) = {
+            let lock = self.state.lock().await;
+            let light = lock.get::<Light>(link)?;
+            (light.on.on, light.effects.is_some())
+        };
 
         let mut payload: Option<DeviceUpdate> = None;
 
@@ -131,36 +136,69 @@ impl Z2mBackend {
             });
         }
 
+        let turning_off = matches!(upd.on, Some(On { on: false }))
+            || upd.dimming.map_or(false, |d| d.brightness <= 0.01);
+
         if !hue_effects {
             /* send generic light update */
-            let transition = upd
-                .dynamics
-                .as_ref()
-                .and_then(|d| d.duration.map(|duration| f64::from(duration) / 1000.0))
-                .or_else(|| {
-                    if upd.dimming.is_some()
-                        || upd.color_temperature.is_some()
-                        || upd.color.is_some()
-                    {
-                        Some(0.4)
-                    } else {
-                        None
-                    }
-                });
+            let transition = if turning_off && !is_currently_on {
+                // If light is ALREADY OFF, do not send transition!
+                // A transition on an off light causes Zigbee2MQTT to send moveToLevelWithOnOff(0),
+                // which turns on the bulb.
+                None
+            } else {
+                upd.dynamics
+                    .as_ref()
+                    .and_then(|d| d.duration.map(|duration| f64::from(duration) / 1000.0))
+                    .or_else(|| {
+                        if (upd.dimming.is_some()
+                            || upd.color_temperature.is_some()
+                            || upd.color.is_some())
+                            && !turning_off
+                        {
+                            Some(0.4)
+                        } else {
+                            None
+                        }
+                    })
+            };
+
+            let brightness = if turning_off {
+                None
+            } else {
+                upd.dimming.map(|dim| dim.brightness / 100.0 * 254.0)
+            };
+
             payload = Some(
                 payload
                     .unwrap_or_default()
-                    .with_state(upd.on.map(|on| on.on))
-                    .with_brightness(upd.dimming.map(|dim| dim.brightness / 100.0 * 254.0))
-                    .with_brightness_step(upd.dimming_delta.map(|dim_delta| {
-                        let brightness = dim_delta.brightness_delta / 100.0 * 254.0;
-                        match dim_delta.action {
-                            DimmingDeltaAction::Up => brightness,
-                            DimmingDeltaAction::Down => -brightness,
-                        }
-                    }))
-                    .with_color_temp(upd.color_temperature.and_then(|ct| ct.mirek))
-                    .with_color_xy(upd.color.map(|col| col.xy))
+                    .with_state(if turning_off {
+                        Some(false)
+                    } else {
+                        upd.on.map(|on| on.on)
+                    })
+                    .with_brightness(brightness)
+                    .with_brightness_step(if turning_off {
+                        None
+                    } else {
+                        upd.dimming_delta.map(|dim_delta| {
+                            let brightness = dim_delta.brightness_delta / 100.0 * 254.0;
+                            match dim_delta.action {
+                                DimmingDeltaAction::Up => brightness,
+                                DimmingDeltaAction::Down => -brightness,
+                            }
+                        })
+                    })
+                    .with_color_temp(if turning_off {
+                        None
+                    } else {
+                        upd.color_temperature.and_then(|ct| ct.mirek)
+                    })
+                    .with_color_xy(if turning_off {
+                        None
+                    } else {
+                        upd.color.map(|col| col.xy)
+                    })
                     .with_transition(transition)
                     // We don't want to send gradient updates twice, but if hue
                     // effects are not supported for this light, this is the best
@@ -299,22 +337,52 @@ impl Z2mBackend {
         link: &ResourceLink,
         upd: &GroupedLightUpdate,
     ) -> ApiResult<()> {
-        let (owner, aux_topic) = {
+        let (owner, aux_topic, is_currently_on) = {
             let lock = self.state.lock().await;
-            let owner = lock.get::<GroupedLight>(link)?.owner;
+            let glight = lock.get::<GroupedLight>(link)?;
+            let owner = glight.owner;
             let topic = lock
                 .aux_get(&owner)
                 .ok()
                 .and_then(|a| a.topic.clone())
                 .or_else(|| lock.aux_get(link).ok().and_then(|a| a.topic.clone()));
-            (owner, topic)
+
+            let is_on = glight.on.as_ref().map_or(false, |o| o.on)
+                || match owner.rtype {
+                    RType::Room => lock.get::<Room>(&owner).ok().map_or(false, |room| {
+                        room.children.iter().any(|dev_link| {
+                            lock.get::<Device>(dev_link).ok().map_or(false, |dev| {
+                                dev.services.iter().any(|svc| {
+                                    svc.rtype == RType::Light
+                                        && lock.get::<Light>(svc).map_or(false, |l| l.on.on)
+                                })
+                            })
+                        })
+                    }),
+                    RType::Zone => lock.get::<Zone>(&owner).ok().map_or(false, |zone| {
+                        zone.children.iter().any(|light_link| {
+                            lock.get::<Light>(light_link).map_or(false, |l| l.on.on)
+                        })
+                    }),
+                    _ => false,
+                };
+
+            (owner, topic, is_on)
         };
 
         match owner.rtype {
             RType::Room | RType::Zone => {
                 let topic = self.rmap.get(&owner).cloned().or(aux_topic);
                 if let Some(topic) = topic {
-                    if let Err(e) = z2mws.send_update(&topic, &upd.into()).await {
+                    let turning_off = matches!(upd.on, Some(On { on: false }))
+                        || upd.dimming.map_or(false, |d| d.brightness <= 0.01);
+
+                    let mut dev_upd: DeviceUpdate = upd.into();
+                    if turning_off && !is_currently_on {
+                        dev_upd.transition = None;
+                    }
+
+                    if let Err(e) = z2mws.send_update(&topic, &dev_upd).await {
                         self.coalescer.clear_in_flight(link);
                         return Err(e);
                     }

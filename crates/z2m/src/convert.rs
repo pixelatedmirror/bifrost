@@ -251,30 +251,58 @@ impl From<&DeviceUpdate> for LightUpdate {
 
 impl From<&GroupedLightUpdate> for DeviceUpdate {
     fn from(upd: &GroupedLightUpdate) -> Self {
-        let transition = upd
-            .dynamics
-            .as_ref()
-            .and_then(|d| d.duration.map(|duration| f64::from(duration) / 1000.0))
-            .or_else(|| {
-                if upd.dimming.is_some() || upd.color_temperature.is_some() || upd.color.is_some() {
-                    Some(0.4)
-                } else {
-                    None
-                }
-            });
+        let turning_off = matches!(upd.on, Some(hue::api::On { on: false }))
+            || upd.dimming.map_or(false, |d| d.brightness <= 0.01);
+
+        let transition = if turning_off {
+            upd.dynamics
+                .as_ref()
+                .and_then(|d| d.duration.map(|duration| f64::from(duration) / 1000.0))
+        } else {
+            upd.dynamics
+                .as_ref()
+                .and_then(|d| d.duration.map(|duration| f64::from(duration) / 1000.0))
+                .or_else(|| {
+                    if upd.dimming.is_some() || upd.color_temperature.is_some() || upd.color.is_some() {
+                        Some(0.4)
+                    } else {
+                        None
+                    }
+                })
+        };
 
         Self::default()
-            .with_state(upd.on.map(|on| on.on))
-            .with_brightness(upd.dimming.map(|dim| dim.brightness / 100.0 * 254.0))
-            .with_brightness_step(upd.dimming_delta.map(|dim_delta| {
-                let brightness = dim_delta.brightness_delta / 100.0 * 254.0;
-                match dim_delta.action {
-                    DimmingDeltaAction::Up => brightness,
-                    DimmingDeltaAction::Down => -brightness,
-                }
-            }))
-            .with_color_temp(upd.color_temperature.and_then(|ct| ct.mirek))
-            .with_color_xy(upd.color.map(|col| col.xy))
+            .with_state(if turning_off {
+                Some(false)
+            } else {
+                upd.on.map(|on| on.on)
+            })
+            .with_brightness(if turning_off {
+                None
+            } else {
+                upd.dimming.map(|dim| dim.brightness / 100.0 * 254.0)
+            })
+            .with_brightness_step(if turning_off {
+                None
+            } else {
+                upd.dimming_delta.map(|dim_delta| {
+                    let brightness = dim_delta.brightness_delta / 100.0 * 254.0;
+                    match dim_delta.action {
+                        DimmingDeltaAction::Up => brightness,
+                        DimmingDeltaAction::Down => -brightness,
+                    }
+                })
+            })
+            .with_color_temp(if turning_off {
+                None
+            } else {
+                upd.color_temperature.and_then(|ct| ct.mirek)
+            })
+            .with_color_xy(if turning_off {
+                None
+            } else {
+                upd.color.map(|col| col.xy)
+            })
             .with_transition(transition)
     }
 }

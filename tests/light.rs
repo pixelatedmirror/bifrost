@@ -962,3 +962,87 @@ async fn smart_plug_support() -> TestResult<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn turn_off_already_off_light_suppresses_transition() -> TestResult<()> {
+    let mut test = TestBridge::start(z2m_state()).await?;
+    let light = test.wait_for_light(IKEA_WARM_WHITE).await?;
+    let baseline = test.hue_client.get_light(&light).await?;
+    assert_eq!(baseline.on.on, false);
+    let mut z2m_requests = test.z2m.subscribe_requests();
+
+    test.hue_client
+        .put_light(
+            &light,
+            &json!({
+                "on": {"on": false},
+                "dimming": {"brightness": 0.0},
+                "dynamics": {"duration": 7000}
+            }),
+        )
+        .await?;
+    z2m_requests
+        .expect_set(&light, json!({"state": "OFF"}))
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn turn_off_on_light_preserves_transition_without_brightness() -> TestResult<()> {
+    let mut test = TestBridge::start(z2m_state()).await?;
+    let light = test.wait_for_light(IKEA_WARM_WHITE).await?;
+    let mut z2m_requests = test.z2m.subscribe_requests();
+
+    test.hue_client
+        .put_light(&light, &json!({"on": {"on": true}}))
+        .await?;
+    z2m_requests
+        .expect_set(&light, json!({"state": "ON"}))
+        .await?;
+    test.z2m.publish(&light, json!({"state": "ON"}))?;
+
+    test.hue_client
+        .put_light(
+            &light,
+            &json!({
+                "on": {"on": false},
+                "dimming": {"brightness": 0.0},
+                "dynamics": {"duration": 7000}
+            }),
+        )
+        .await?;
+    z2m_requests
+        .expect_set(&light, json!({"state": "OFF", "transition": 7.0}))
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn turn_off_hue_light_with_dimming_suppresses_brightness() -> TestResult<()> {
+    let mut test = TestBridge::start(z2m_state()).await?;
+    let light = test.wait_for_light(HUE_WHITE_AMBIANCE).await?;
+    let mut z2m_requests = test.z2m.subscribe_requests();
+
+    test.hue_client
+        .put_light(
+            &light,
+            &json!({
+                "on": {"on": false},
+                "dimming": {"brightness": 0.0}
+            }),
+        )
+        .await?;
+    z2m_requests
+        .expect_set(
+            &light,
+            json!({
+                "command": {
+                    "cluster": 0xFC03,
+                    "command": 0,
+                    "payload": {"data": [0x11, 0x00, 0x00, 0x01, 0x00]}
+                }
+            }),
+        )
+        .await?;
+    Ok(())
+}

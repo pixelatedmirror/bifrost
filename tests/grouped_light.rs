@@ -398,3 +398,51 @@ async fn dimming_delta_down() -> TestResult<()> {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn turn_off_already_off_grouped_light_suppresses_transition() -> TestResult<()> {
+    let mut test = TestBridge::start(z2m_state()).await?;
+    let grouped_light = test.wait_for_grouped_light(&LIVING_ROOM_GROUP).await?;
+    let baseline = test.hue_client.get_grouped_light(&grouped_light).await?;
+    assert_eq!(baseline.on, Some(On::new(false)));
+    let mut z2m_requests = test.z2m.subscribe_requests();
+
+    test.hue_client
+        .put_grouped_light(
+            &grouped_light,
+            &json!({
+                "on": {"on": false},
+                "dimming": {"brightness": 0.0},
+                "dynamics": {"duration": 7000}
+            }),
+        )
+        .await?;
+    z2m_requests
+        .expect_set(&grouped_light, json!({"state": "OFF"}))
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn turn_off_on_grouped_light_preserves_transition_without_brightness() -> TestResult<()> {
+    let mut test = TestBridge::start(z2m_state()).await?;
+    let grouped_light = test.wait_for_grouped_light(&KITCHEN_GROUP).await?;
+    let baseline = test.hue_client.get_grouped_light(&grouped_light).await?;
+    assert_eq!(baseline.on, Some(On::new(true)));
+    let mut z2m_requests = test.z2m.subscribe_requests();
+
+    test.hue_client
+        .put_grouped_light(
+            &grouped_light,
+            &json!({
+                "on": {"on": false},
+                "dimming": {"brightness": 0.0},
+                "dynamics": {"duration": 7000}
+            }),
+        )
+        .await?;
+    z2m_requests
+        .expect_set(&grouped_light, json!({"state": "OFF", "transition": 7.0}))
+        .await?;
+    Ok(())
+}
